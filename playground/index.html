@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cipr Lang | Playground</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/nord.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+
+    <style>
+        :root {
+            --background: #09090b;
+            --foreground: #fafafa;
+            --muted: #27272a;
+            --muted-foreground: #a1a1aa;
+            --border: #27272a;
+            --radius: 0.5rem;
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--background);
+            color: var(--foreground);
+            font-family: var(--font-sans);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        header {
+            height: 56px;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(9, 9, 11, 0.8);
+            backdrop-filter: blur(8px);
+        }
+
+        .logo {
+            font-weight: 600;
+            font-size: 17px;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-badge {
+            background: var(--foreground);
+            color: var(--background);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .btn-primary {
+            background-color: var(--foreground);
+            color: var(--background);
+            border: none;
+            height: 36px;
+            padding: 0 18px;
+            border-radius: 6px;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .pane-left {
+            flex: 0 0 50%;
+        }
+
+        .pane-header {
+            height: 48px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            background-color: var(--background);
+            gap: 24px;
+        }
+
+        .pane-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            display: flex;
+            align-items: center;
+        }
+
+        .custom-select-container {
+            position: relative;
+            user-select: none;
+        }
+
+        .custom-select-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            background-color: transparent;
+            color: var(--foreground);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 500;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .custom-select-trigger:hover, .custom-select-trigger.open {
+            background-color: var(--muted);
+        }
+
+        .custom-select-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            background-color: var(--background);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            min-width: 140px;
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            padding: 4px;
+        }
+
+        .custom-select-dropdown.open {
+            display: flex;
+        }
+
+        .custom-select-option {
+            padding: 6px 8px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--muted-foreground);
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.1s;
+        }
+
+        .custom-select-option:hover {
+            background-color: var(--muted);
+            color: var(--foreground);
+        }
+
+        .custom-select-option.active {
+            color: var(--foreground);
+            font-weight: 600;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 24px;
+            height: 100%;
+        }
+
+        .tab {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            position: relative;
+            transition: color 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--foreground);
+        }
+
+        .tab.active {
+            color: var(--foreground);
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: var(--foreground);
+        }
+
+        .CodeMirror {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 15px;
+            line-height: 1.6;
+            background-color: var(--background) !important;
+        }
+        
+        .CodeMirror-gutters {
+            background-color: var(--background) !important;
+            border-right: 1px solid var(--border) !important;
+        }
+
+        .CodeMirror-linenumber {
+            color: #52525b !important;
+            padding-right: 12px !important;
+        }
+
+
+        .content-area {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: none;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .content-area.active {
+            display: block;
+        }
+
+        #terminal-output {
+            color: #d4d4d8;
+            white-space: pre-wrap;
+        }
+
+        #ast-output {
+            color: #8b949e;
+            white-space: pre;
+        }
+
+        #docs-output {
+            font-family: var(--font-sans);
+            color: #d4d4d8;
+        }
+
+        .doc-section {
+            margin-bottom: 24px;
+        }
+
+        .doc-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--foreground);
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+
+        .doc-item {
+            margin-bottom: 16px;
+        }
+
+        .doc-item code {
+            background-color: var(--muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: #38bdf8;
+        }
+
+        .doc-item p {
+            font-size: 14px;
+            color: var(--muted-foreground);
+            margin: 4px 0 0 0;
+        }
+
+        .status-bar {
+            height: 32px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 16px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            color: var(--muted-foreground);
+        }
+
+        .time-metric {
+            color: var(--foreground);
+            font-weight: 500;
+            margin-left: 4px;
+        }
+
+        #loader {
+            position: absolute;
+            inset: 0;
+            background: var(--background);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--foreground);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 4px;
+            border: 2px solid var(--background);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .pane {
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+
+        .pane-left {
+            flex: 0 0 50%;
+        }
+        
+        .pane-right {
+            flex: 1;
+        }
+
+        .divider {
+            width: 4px;
+            background-color: var(--border);
+            cursor: col-resize;
+            transition: background-color 0.2s;
+            z-index: 10;
+        }
+
+        .divider:hover, .divider:active {
+            background-color: #52525b;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div style="font-size: 15px; color: var(--muted-foreground);">Initializing WASM Engine...</div>
+    </div>
+
+    <header>
+        <div class="logo">
+            <span class="logo-badge">WASM</span>
+            Cipr Playground
+        </div>
+        <button class="btn-primary" id="run-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Run Code
+        </button>
+    </header>
+
+    <div class="workspace">
+        <div class="pane pane-left" id="pane-left">
+            <div class="pane-header">
+                <div class="pane-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; color: #a1a1aa;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    
+                    <div class="custom-select-container" id="file-select-container">
+                        <div class="custom-select-trigger" id="file-select-trigger">
+                            <span id="file-select-label">main.cipr</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                        <div class="custom-select-dropdown" id="file-select-dropdown">
+                            <div class="custom-select-option active" data-value="intro">main.cipr</div>
+                            <div class="custom-select-option" data-value="math">math.cipr</div>
+                            <div class="custom-select-option" data-value="fs">fs.cipr</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <textarea id="code-editor"></textarea>
+        </div>
+        
+        <div class="divider" id="divider"></div>
+
+        <div class="pane pane-right">
+            <div class="pane-header">
+                <div class="tabs">
+                    <div class="tab active" data-target="terminal-output">Output</div>
+                    <div class="tab" data-target="ast-output">AST Explorer</div>
+                    <div class="tab" data-target="docs-output">Docs</div>
+                </div>
+            </div>
+            
+            <div class="content-area active" id="terminal-output">Ready. Press 'Run Code' to execute.</div>
+            <div class="content-area" id="ast-output"></div>
+            
+            <div class="content-area" id="docs-output">
+                <div class="doc-section">
+                    <h3>Core & Variables</h3>
+                    <div class="doc-item">
+                        <code>echo &lt;value&gt;</code>
+                        <p>Prints a value to the standard output.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>time()</code>
+                        <p>Returns the current UNIX timestamp as a float.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>rand(max)</code>
+                        <p>Returns a random number between 0 and max - 1.</p>
+                    </div>
+                </div>
+
+                <div class="doc-section">
+                    <h3>Virtual File System (In-Memory)</h3>
+                    <div class="doc-item">
+                        <code>write_file(path, content)</code>
+                        <p>Writes a string to the virtual browser filesystem.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>read_file(path)</code>
+                        <p>Reads a string from a virtual file.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>ls(dir_path)</code>
+                        <p>Returns an array of files in the virtual directory.</p>
+                    </div>
+                </div>
+
+                <div class="doc-section">
+                    <h3>Data & Strings</h3>
+                    <div class="doc-item">
+                        <code>size(array | string)</code>
+                        <p>Returns the length of a string or array.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>split(string, delimiter)</code>
+                        <p>Splits a string into an array of substrings.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>trim(string)</code>
+                        <p>Removes leading and trailing whitespace.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>extract(source, start, end)</code>
+                        <p>Extracts a substring between two string markers.</p>
+                    </div>
+                </div>
+
+                <div class="doc-section">
+                    <h3>Cryptography</h3>
+                    <div class="doc-item">
+                        <code>base64_encode(string)</code>
+                        <p>Encodes a string into Base64 format.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>base64_decode(string)</code>
+                        <p>Decodes a Base64 string back to plaintext.</p>
+                    </div>
+                    <div class="doc-item">
+                        <code>hex(string)</code>
+                        <p>Converts a string to its hexadecimal representation.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <span id="execution-time">Status: Idle</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load the compiled WebAssembly -->
+    <script src="wasm/cipr.js"></script>
+    
+    <script>
+        const presets = {
+            intro: `// -----------------------------------------
+// Cipr Language Playground
+// Powered by WebAssembly
+// -----------------------------------------
+
+let greeting = "SYSTEM INITIALIZED.";
+echo greeting;
+
+// 1. Recursive Function Test
+fn fib(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+echo "Computing 15th Fibonacci number...";
+echo "Result: " + fib(15);
+
+// 2. Arrays & Iteration
+let arr = [10, 20, 30];
+let sum = 0;
+for (let i = 0; i < size(arr); i = i + 1) {
+    sum = sum + arr[i];
+}
+echo "Array sum: " + sum;
+
+// 3. Native Cryptography Module (C++)
+let secret = "WebAssembly is incredibly fast";
+let encoded = base64_encode(secret);
+echo "Base64 Encoded: " + encoded;
+`,
+            math: `// -----------------------------------------
+// Fast Math & Logic Test
+// -----------------------------------------
+
+echo "Generating random numbers...";
+let total = 0;
+for (let i = 0; i < 5; i = i + 1) {
+    let r = rand(100);
+    echo "  -> Rolled: " + r;
+    total = total + r;
+}
+echo "Total sum: " + total;
+
+// Finding Primes
+fn is_prime(n) {
+    if (n < 2) return false;
+    for (let i = 2; i < n; i = i + 1) {
+        if (n - (n / i) * i == 0) { // Modulo trick
+            return false;
+        }
+    }
+    return true;
+}
+
+echo "Is 17 prime? " + is_prime(17);
+`,
+            fs: `// -----------------------------------------
+// Virtual File System (In-Memory)
+// Emscripten provides a full virtual FS!
+// -----------------------------------------
+
+let file_name = "secret_config.txt";
+
+echo "1. Writing to " + file_name + "...";
+write_file(file_name, "API_KEY=super_secret_wasm_key_123");
+
+echo "2. Listing directory contents:";
+let files = ls(".");
+for (let i = 0; i < size(files); i = i + 1) {
+    echo "  - " + files[i];
+}
+
+echo "3. Reading file back:";
+let content = read_file(file_name);
+echo "  [CONTENT] " + content;
+`
+        };
+
+        const editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
+            lineNumbers: true,
+            theme: "nord",
+            mode: "javascript", 
+            indentUnit: 4,
+            tabSize: 4,
+            lineWrapping: true
+        });
+        editor.setValue(presets.intro);
+
+        // Custom Shadcn Dropdown Logic
+        const trigger = document.getElementById('file-select-trigger');
+        const dropdown = document.getElementById('file-select-dropdown');
+        const label = document.getElementById('file-select-label');
+        const options = document.querySelectorAll('.custom-select-option');
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('open');
+            trigger.classList.toggle('open');
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            dropdown.classList.remove('open');
+            trigger.classList.remove('open');
+        });
+
+        options.forEach(option => {
+            option.addEventListener('click', (e) => {
+                // Update active state
+                options.forEach(opt => opt.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                // Update label
+                label.textContent = e.target.textContent;
+                
+                // Load preset
+                const selectedValue = e.target.dataset.value;
+                editor.setValue(presets[selectedValue]);
+            });
+        });
+
+        // Tab Switching Logic
+        const tabs = document.querySelectorAll('.tab');
+        const contentAreas = document.querySelectorAll('.content-area');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                contentAreas.forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.target).classList.add('active');
+            });
+        });
+
+        // Resizable Divider Logic
+        const divider = document.getElementById('divider');
+        const paneLeft = document.getElementById('pane-left');
+        let isDragging = false;
+
+        divider.addEventListener('mousedown', function(e) {
+            isDragging = true;
+            document.body.style.cursor = 'col-resize';
+            // Prevent text selection and iframe pointer events while dragging
+            e.preventDefault(); 
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            // Calculate new width percentage based on mouse position
+            const newWidth = (e.clientX / window.innerWidth) * 100;
+            
+            // Constrain between 20% and 80%
+            if (newWidth > 20 && newWidth < 80) {
+                // Must use flex-basis instead of width when inside a flex container 
+                paneLeft.style.flex = '0 0 ' + newWidth + '%';
+            }
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isDragging) {
+                isDragging = false;
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // LISP AST Formatter
+        function formatAST(lispStr) {
+            let indent = 0;
+            let formatted = "";
+
+            for (let i = 0; i < lispStr.length; i++) {
+                let char = lispStr[i];
+
+                if (char === '(') {
+                    if (i > 0 && lispStr[i-1] === ' ') {
+                        formatted = formatted.slice(0, -1);
+                    }
+                    if (i > 0) {
+                        formatted += "\n" + "  ".repeat(indent);
+                    }
+                    formatted += "(";
+                    indent++;
+                } else if (char === ')') {
+                    indent--;
+                    formatted += ")";
+                } else {
+                    formatted += char;
+                }
+            }
+            return formatted.trim();
+        }
+
+        let ciprModule = null;
+
+        // Initialize WebAssembly
+        createCiprModule().then(Module => {
+            ciprModule = Module;
+            document.getElementById('loader').style.display = 'none';
+        });
+
+        // Execution Logic
+        const terminalOutput = document.getElementById('terminal-output');
+        const astOutput = document.getElementById('ast-output');
+        const execTime = document.getElementById('execution-time');
+
+        document.getElementById('run-btn').addEventListener('click', () => {
+            if (!ciprModule) return;
+            
+            const code = editor.getValue();
+            
+            terminalOutput.textContent = "Executing...";
+            execTime.textContent = "Status: Running...";
+
+            setTimeout(() => {
+                const t0 = performance.now();
+                
+                const output = ciprModule.runCode(code);
+                const rawAst = ciprModule.getAst(code);
+                
+                const t1 = performance.now();
+                const timeMs = (t1 - t0).toFixed(2);
+
+                terminalOutput.textContent = output || "(No output)";
+                astOutput.textContent = formatAST(rawAst) || "No AST generated.";
+                
+                execTime.innerHTML = 'Process exited in <span class="time-metric">' + timeMs + 'ms</span>';
+            }, 10);
+        });
+    </script>
+</body>
+</html>
