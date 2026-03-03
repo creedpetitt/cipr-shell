@@ -9,6 +9,8 @@
 #include "Common/Return.h"
 #include "Native/NativeRegistry.h"
 
+#include <sstream>
+
 Interpreter::Interpreter(Arena& arena) : arena(arena) {
     globals = std::make_shared<Environment>();
     environment = globals;
@@ -352,10 +354,9 @@ std::string Interpreter::stringify(const Literal& value) {
     if (std::holds_alternative<bool>(value)) return std::get<bool>(value) ? "true" : "false";
 
     if (std::holds_alternative<double>(value)) {
-        std::string text = std::to_string(std::get<double>(value));
-        text.erase(text.find_last_not_of('0') + 1, std::string::npos);
-        if (text.back() == '.') text.pop_back();
-        return text;
+        std::ostringstream oss;
+        oss << std::get<double>(value);
+        return oss.str();
     }
 
     if (std::holds_alternative<std::string>(value)) return std::get<std::string>(value);
