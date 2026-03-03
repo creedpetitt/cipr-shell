@@ -102,7 +102,7 @@ fn save_lib(name, code) {
     echo "Library saved to: " + path;
 }
 
-echo "Cipr Shell v1.0 Loaded. Type help() for info.";
+echo "Cipr Shell v1.0 Loaded. Type help(); for info.";
 EOF
 else
     echo "[~] ~/.ciprrc already exists. Skipping config overwrite."
