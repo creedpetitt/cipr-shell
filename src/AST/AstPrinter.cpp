@@ -3,6 +3,7 @@
 //
 
 #include "AstPrinter.h"
+#include <sstream>
 
 std::string AstPrinter::print(const int nodeIdx) {
     if (nodeIdx == -1) return "";
@@ -13,11 +14,9 @@ std::string AstPrinter::print(const int nodeIdx) {
                 return "null";
 
             if (std::holds_alternative<double>(node.value)) {
-                std::string s = std::to_string(std::get<double>(node.value));
-                // Remove trailing zeros
-                s.erase(s.find_last_not_of('0') + 1, std::string::npos);
-                if (s.back() == '.') s.pop_back();
-                return s;
+                std::ostringstream oss;
+                oss << std::get<double>(node.value);
+                return oss.str();
             }
 
             if (std::holds_alternative<std::string>(node.value))
@@ -57,6 +56,10 @@ std::string AstPrinter::print(const int nodeIdx) {
             return parenthesize("array", node.children);
         case NodeType::INDEX_GET:
             return parenthesize("index", node.children);
+        case NodeType::STMT_FUNCTION:
+            return parenthesize("fn " + node.op.lexeme, node.children);
+        case NodeType::STMT_RETURN:
+            return parenthesize("return", node.children);
     }
     return "";
 }
