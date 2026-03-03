@@ -35,6 +35,7 @@ struct NativeTime final : Callable {
     }
 };
 
+#ifndef __EMSCRIPTEN__
 struct NativeRun final : Callable {
     int arity() override {
         return 1;
@@ -59,6 +60,7 @@ struct NativeRun final : Callable {
         return "<native fn run>";
     }
 };
+#endif
 
 struct NativeEnv final : Callable {
     int arity() override {
