@@ -6,13 +6,21 @@
 
 **Cipr** is a lightweight, zero-dependency scripting language designed for systems administration, network automation, and security testing. Built in C++17, it combines the familiar syntax of C-family languages with high-level native primitives for socket networking, process management, and file I/O.
 
+
 ## Key Features
 
 *   **Zero Dependencies**: Compiles to a single, standalone binary.
+*   **WebAssembly Powered**: Run the entire interpreter engine in the browser.
 *   **Network Native**: Support for TCP sockets (`listen`, `accept`) and HTTP (`http_get`).
 *   **System Integration**: Direct access to process lists (`ps`, `kill`) and environment variables.
 *   **Extensible**: Module system via `include()` and persistent libraries.
 *   **Modern C++**: Built using Recursive Descent Parsing with an AST Arena architecture.
+
+## Try it Online
+
+You can run Cipr scripts directly in your browser without installing anything. The playground is powered by WebAssembly and includes a live AST explorer.
+
+**[Cipr Web Playground](https://cipr.creedpetitt.dev)**
 
 ## Installation
 
