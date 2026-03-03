@@ -1,2 +1,9 @@
+playground/wasm/
+
 .idea/
+.DS_Store
+
 cmake-build-debug/
+build/
+web_build/
+

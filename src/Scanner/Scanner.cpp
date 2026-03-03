@@ -146,6 +146,7 @@ void Scanner::string(char delimiter) {
         
         if (peek() == '\\') {
             advance(); // consume '\'
+            if (isAtEnd()) break;
             switch (peek()) {
                 case 'n': value += '\n'; break;
                 case 't': value += '\t'; break;
