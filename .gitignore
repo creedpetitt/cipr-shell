@@ -1,9 +1,18 @@
 playground/wasm/
-
-.idea/
-.DS_Store
-
-cmake-build-debug/
-build/
 web_build/
 
+/target
+Cargo.lock.bak
+
+*.ll
+*.o
+*.s
+*.out
+out/
+build/
+
+.vscode/
+.idea/
+*.swp
+
+.DS_Store
