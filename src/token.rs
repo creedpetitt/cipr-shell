@@ -18,6 +18,7 @@ pub enum TokenType {
     Star,
     Dollar,
     Colon,
+    At,
 
     // One or two character
     Bang,

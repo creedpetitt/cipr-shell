@@ -64,8 +64,7 @@ impl<'a> Parser<'a> {
 
         let mut type_annotation = None;
         if self.match_types(&[TokenType::Colon]) {
-            let type_token = self.consume(TokenType::Identifier, "Expect type name.")?;
-            type_annotation = Some(type_token.lexeme);
+            type_annotation = self.parse_type_annotation();
         }
 
         let initializer = if self.match_types(&[TokenType::Equal]) {
@@ -103,8 +102,7 @@ impl<'a> Parser<'a> {
 
                 let mut type_annotation = None;
                 if self.match_types(&[TokenType::Colon]) {
-                    let type_token = self.consume(TokenType::Identifier, "Expect type name.")?;
-                    type_annotation = Some(type_token.lexeme);
+                    type_annotation = self.parse_type_annotation();
                 }
 
                 let param_node = alloc_node_typed(
@@ -125,8 +123,7 @@ impl<'a> Parser<'a> {
 
         let mut return_type = None;
         if self.match_types(&[TokenType::Colon]) {
-            let ret_token = self.consume(TokenType::Identifier, "Expect return type.")?;
-            return_type = Some(ret_token.lexeme);
+            return_type = self.parse_type_annotation();
         }
 
         self.consume(
@@ -380,6 +377,16 @@ impl<'a> Parser<'a> {
                     Value::Null,
                     vec![value],
                 ));
+            } else if left_type == NodeType::Dereference {
+                let equals = self.previous().clone();
+                let inner_expr = self.arena[expr].children[0];
+                return Some(alloc_node(
+                    self.arena,
+                    NodeType::AssignDeref,
+                    equals,
+                    Value::Null,
+                    vec![inner_expr, value],
+                ));
             }
 
             self.error_at(&equals, "Invalid assignment target.");
@@ -502,12 +509,17 @@ impl<'a> Parser<'a> {
     }
 
     fn unary(&mut self) -> Option<NodeId> {
-        if self.match_types(&[TokenType::Bang, TokenType::Minus]) {
+        if self.match_types(&[TokenType::Bang, TokenType::Minus, TokenType::At]) {
             let op = self.previous().clone();
             let right = self.unary();
+            let node_type = if op.token_type == TokenType::At {
+                NodeType::AddressOf
+            } else {
+                NodeType::Unary
+            };
             return Some(alloc_node(
                 self.arena,
-                NodeType::Unary,
+                node_type,
                 op,
                 Value::Null,
                 vec![right],
@@ -525,6 +537,15 @@ impl<'a> Parser<'a> {
                 expr = self.finish_call(expr)?;
             } else if self.match_types(&[TokenType::LeftBracket]) {
                 expr = self.finish_index(expr)?;
+            } else if self.match_types(&[TokenType::At]) {
+                let op = self.previous().clone();
+                expr = alloc_node(
+                    self.arena,
+                    NodeType::Dereference,
+                    op,
+                    Value::Null,
+                    vec![Some(expr)],
+                );
             } else {
                 break;
             }
@@ -692,6 +713,15 @@ impl<'a> Parser<'a> {
 
         self.error_at_peek("Expect expression.");
         None
+    }
+
+    fn parse_type_annotation(&mut self) -> Option<String> {
+        let mut prefix = String::new();
+        while self.match_types(&[TokenType::At]) {
+            prefix.push('@');
+        }
+        let type_token = self.consume(TokenType::Identifier, "Expect type name.")?;
+        Some(format!("{}{}", prefix, type_token.lexeme))
     }
 
     // ── Utilities ──

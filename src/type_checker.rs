@@ -70,14 +70,20 @@ impl<'a> TypeChecker<'a> {
 
     fn parse_type_annotation(annotation: &Option<String>) -> CiprType {
         match annotation {
-            Some(s) => match s.as_str() {
-                "int" => CiprType::Int,
-                "float" => CiprType::Float,
-                "str" => CiprType::Str,
-                "bool" => CiprType::Bool,
-                "void" => CiprType::Void,
-                _ => CiprType::Unknown,
-            },
+            Some(s) => {
+                if s.starts_with('@') {
+                    let inner = s.trim_start_matches('@').to_string();
+                    return CiprType::Pointer(Box::new(Self::parse_type_annotation(&Some(inner))));
+                }
+                match s.as_str() {
+                    "int" => CiprType::Int,
+                    "float" => CiprType::Float,
+                    "str" => CiprType::Str,
+                    "bool" => CiprType::Bool,
+                    "void" => CiprType::Void,
+                    _ => CiprType::Unknown,
+                }
+            }
             None => CiprType::Unknown,
         }
     }
@@ -103,6 +109,9 @@ impl<'a> TypeChecker<'a> {
             NodeType::Call => self.check_call(id),
             NodeType::Array => self.check_array(id),
             NodeType::IndexGet => self.check_index_get(id),
+            NodeType::AddressOf => self.check_addressof(id),
+            NodeType::Dereference => self.check_dereference(id),
+            NodeType::AssignDeref => self.check_assign_deref(id),
             _ => CiprType::Unknown,
         };
 
@@ -521,5 +530,64 @@ impl<'a> TypeChecker<'a> {
                 CiprType::Unknown
             }
         }
+    }
+
+    fn check_addressof(&mut self, id: NodeId) -> CiprType {
+        let children = self.arena[id].children.clone();
+        let target_id = children[0].expect("AddressOf missing target");
+        let target_type = self.check(target_id);
+
+        let target_node_type = self.arena[target_id].node_type;
+        if target_node_type != NodeType::VarExpr && target_node_type != NodeType::Dereference && target_node_type != NodeType::IndexGet {
+            self.error(self.arena[id].token.line, "Can only take the address of a variable, dereference, or array index.");
+            return CiprType::Unknown;
+        }
+
+        CiprType::Pointer(Box::new(target_type))
+    }
+
+    fn check_dereference(&mut self, id: NodeId) -> CiprType {
+        let children = self.arena[id].children.clone();
+        let target_id = children[0].expect("Dereference missing target");
+        let target_type = self.check(target_id);
+
+        match target_type {
+            CiprType::Pointer(inner) => *inner,
+            CiprType::Unknown => CiprType::Unknown,
+            _ => {
+                self.error(self.arena[id].token.line, "Cannot dereference a non-pointer type.");
+                CiprType::Unknown
+            }
+        }
+    }
+
+    fn check_assign_deref(&mut self, id: NodeId) -> CiprType {
+        let children = self.arena[id].children.clone();
+        let ptr_expr_id = children[0].expect("AssignDeref missing target");
+        let val_expr_id = children[1].expect("AssignDeref missing value");
+
+        let ptr_type = self.check(ptr_expr_id);
+        let val_type = self.check(val_expr_id);
+
+        let expected_type = match ptr_type {
+            CiprType::Pointer(inner) => *inner,
+            CiprType::Unknown => CiprType::Unknown,
+            _ => {
+                self.error(self.arena[id].token.line, "Cannot assign to dereference of a non-pointer type.");
+                CiprType::Unknown
+            }
+        };
+
+        if expected_type != CiprType::Unknown && val_type != CiprType::Unknown && expected_type != val_type {
+            self.error(
+                self.arena[id].token.line,
+                &format!(
+                    "Cannot assign {:?} to dereferenced pointer of type {:?}",
+                    val_type, expected_type
+                ),
+            );
+        }
+
+        expected_type
     }
 }

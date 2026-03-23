@@ -76,6 +76,7 @@ impl Scanner {
             ';' => self.add_token(TokenType::Semicolon),
             ':' => self.add_token(TokenType::Colon),
             '*' => self.add_token(TokenType::Star),
+            '@' => self.add_token(TokenType::At),
 
             '!' => {
                 let tt = if self.match_char('=') {

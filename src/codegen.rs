@@ -195,6 +195,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             NodeType::Array => self.visit_array(id),
             NodeType::IndexGet => self.visit_index_get(id),
             NodeType::Call => self.visit_call(id),
+            NodeType::AddressOf => self.visit_addressof(id),
+            NodeType::Dereference => self.visit_dereference(id),
+            NodeType::AssignDeref => self.visit_assign_deref(id),
             _ => Err(format!("Unsupported evaluation node: {:?}", node_type)),
         }
     }
@@ -605,6 +608,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let inner = self.get_llvm_type(elem)?;
                 Ok(inner.ptr_type(inkwell::AddressSpace::from(0)).into())
             }
+            CiprType::Pointer(inner) => {
+                let inner_llvm = self.get_llvm_type(inner)?;
+                Ok(inner_llvm.ptr_type(inkwell::AddressSpace::from(0)).into())
+            }
             CiprType::Void | CiprType::Unknown => Ok(self.context.i32_type().into()), // Dummy type for void
             _ => Err(format!("Unsupported LLVM type mapping for: {:?}", resolved_type)),
         }
@@ -649,5 +656,57 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         };
         
         Ok(self.builder.build_load(elem_ptr, "idx_load").map_err(|e| e.to_string())?)
+    }
+
+    fn visit_addressof(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let children = self.arena[id].children.clone();
+        let target_id = children[0].expect("AddressOf missing target");
+        let target_node_type = self.arena[target_id].node_type;
+
+        if target_node_type == NodeType::VarExpr {
+            let name = self.arena[target_id].token.lexeme.clone();
+            let ptr = match self.symbol_table.borrow().get(&name) {
+                Some(p) => p,
+                None => return Err(format!("Undefined variable in addressof: {}", name)),
+            };
+            Ok(ptr.into())
+        } else if target_node_type == NodeType::Dereference {
+            let deref_children = self.arena[target_id].children.clone();
+            let inner_id = deref_children[0].unwrap();
+            self.evaluate(inner_id)
+        } else if target_node_type == NodeType::IndexGet {
+            let idx_children = self.arena[target_id].children.clone();
+            let arr_id = idx_children[0].unwrap();
+            let index_id = idx_children[1].unwrap();
+            
+            let arr_ptr = self.evaluate(arr_id)?.into_pointer_value();
+            let idx_val = self.evaluate(index_id)?.into_int_value();
+            
+            let elem_ptr = unsafe {
+                self.builder.build_in_bounds_gep(arr_ptr, &[idx_val], "addrof_idx").map_err(|e| e.to_string())?
+            };
+            Ok(elem_ptr.into())
+        } else {
+            Err("Unsupported AddressOf target in codegen".to_string())
+        }
+    }
+
+    fn visit_dereference(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let children = self.arena[id].children.clone();
+        let target_id = children[0].expect("Dereference missing target");
+        let ptr_val = self.evaluate(target_id)?.into_pointer_value();
+        Ok(self.builder.build_load(ptr_val, "deref_load").map_err(|e| e.to_string())?)
+    }
+
+    fn visit_assign_deref(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let children = self.arena[id].children.clone();
+        let ptr_expr_id = children[0].expect("AssignDeref missing target");
+        let val_expr_id = children[1].expect("AssignDeref missing value");
+
+        let ptr_val = self.evaluate(ptr_expr_id)?.into_pointer_value();
+        let val = self.evaluate(val_expr_id)?;
+
+        self.builder.build_store(ptr_val, val).map_err(|e| e.to_string())?;
+        Ok(val)
     }
 }

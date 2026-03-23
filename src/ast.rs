@@ -25,6 +25,9 @@ pub enum NodeType {
     StmtReturn,
     Array,
     IndexGet,
+    AddressOf,
+    Dereference,
+    AssignDeref,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +39,7 @@ pub enum CiprType {
     Void,
     Array(Box<CiprType>),
     Callable(Vec<CiprType>, Box<CiprType>),
+    Pointer(Box<CiprType>),
     Unknown,
 }
 
