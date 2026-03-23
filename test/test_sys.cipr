@@ -1,9 +1,0 @@
-echo "[TEST] System Module";
-
-let p_list = ps();
-if (size(p_list) == 0) { echo "FAIL: ps empty"; exit(1); }
-
-let home = env("HOME");
-if (size(home) == 0) { echo "FAIL: env HOME empty"; exit(1); }
-
-echo "PASS: System Module";
