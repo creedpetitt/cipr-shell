@@ -25,6 +25,7 @@ impl Scanner {
         keywords.insert("null", TokenType::Null);
         keywords.insert("or", TokenType::Or);
         keywords.insert("return", TokenType::Return);
+        keywords.insert("struct", TokenType::Struct);
         keywords.insert("super", TokenType::Super);
         keywords.insert("this", TokenType::This);
         keywords.insert("true", TokenType::True);

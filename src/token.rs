@@ -47,6 +47,7 @@ pub enum TokenType {
     Null,
     Or,
     Return,
+    Struct,
     Super,
     This,
     True,

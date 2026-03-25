@@ -42,7 +42,9 @@ impl<'a> Parser<'a> {
     // ── Declarations ──
 
     fn declaration(&mut self) -> Option<NodeId> {
-        let result = if self.match_types(&[TokenType::Fn]) {
+        let result = if self.match_types(&[TokenType::Struct]) {
+            self.struct_declaration()
+        } else if self.match_types(&[TokenType::Fn]) {
             self.function("function")
         } else if self.match_types(&[TokenType::Let]) {
             self.var_declaration()
@@ -82,6 +84,41 @@ impl<'a> Parser<'a> {
             Value::Null,
             vec![initializer],
             type_annotation,
+        ))
+    }
+
+    fn struct_declaration(&mut self) -> Option<NodeId> {
+        let name = self.consume(TokenType::Identifier, "Expect struct name.")?;
+        self.consume(TokenType::LeftBrace, "Expect '{' before struct body.")?;
+
+        let mut fields: Vec<Option<NodeId>> = Vec::new();
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            let field_name = self.consume(TokenType::Identifier, "Expect field name.")?;
+            self.consume(TokenType::Colon, "Expect ':' after field name.")?;
+            let field_type = self.parse_type_annotation();
+            
+            let field_node = alloc_node_typed(
+                self.arena,
+                NodeType::VarExpr,
+                field_name,
+                Value::Null,
+                vec![],
+                field_type,
+            );
+            fields.push(Some(field_node));
+
+            if !self.match_types(&[TokenType::Comma]) {
+                break;
+            }
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after struct body.")?;
+
+        Some(alloc_node(
+            self.arena,
+            NodeType::StmtStructDecl,
+            name,
+            Value::Null,
+            fields,
         ))
     }
 
@@ -377,6 +414,16 @@ impl<'a> Parser<'a> {
                     Value::Null,
                     vec![value],
                 ));
+            } else if left_type == NodeType::GetField {
+                let name = self.arena[expr].token.clone();
+                let target_expr = self.arena[expr].children[0];
+                return Some(alloc_node(
+                    self.arena,
+                    NodeType::AssignField,
+                    name,
+                    Value::Null,
+                    vec![target_expr, value],
+                ));
             } else if left_type == NodeType::Dereference {
                 let equals = self.previous().clone();
                 let inner_expr = self.arena[expr].children[0];
@@ -537,6 +584,15 @@ impl<'a> Parser<'a> {
                 expr = self.finish_call(expr)?;
             } else if self.match_types(&[TokenType::LeftBracket]) {
                 expr = self.finish_index(expr)?;
+            } else if self.match_types(&[TokenType::Dot]) {
+                let name = self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
+                expr = alloc_node(
+                    self.arena,
+                    NodeType::GetField,
+                    name,
+                    Value::Null,
+                    vec![Some(expr)],
+                );
             } else if self.match_types(&[TokenType::At]) {
                 let op = self.previous().clone();
                 expr = alloc_node(
@@ -702,6 +758,37 @@ impl<'a> Parser<'a> {
 
         if self.match_types(&[TokenType::Identifier]) {
             let prev = self.previous().clone();
+            
+            if self.match_types(&[TokenType::LeftBrace]) {
+                let mut field_inits = Vec::new();
+                while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+                    let field_name = self.consume(TokenType::Identifier, "Expect field name.")?;
+                    self.consume(TokenType::Colon, "Expect ':' after field name.")?;
+                    let expr = self.expression();
+                    
+                    let field_node = alloc_node(
+                        self.arena,
+                        NodeType::Assign,
+                        field_name,
+                        Value::Null,
+                        vec![expr],
+                    );
+                    field_inits.push(Some(field_node));
+
+                    if !self.match_types(&[TokenType::Comma]) {
+                        break;
+                    }
+                }
+                self.consume(TokenType::RightBrace, "Expect '}' after struct initialization.")?;
+                return Some(alloc_node(
+                    self.arena,
+                    NodeType::StructInit,
+                    prev,
+                    Value::Null,
+                    field_inits,
+                ));
+            }
+
             return Some(alloc_node(
                 self.arena,
                 NodeType::VarExpr,

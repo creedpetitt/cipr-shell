@@ -28,6 +28,10 @@ pub enum NodeType {
     AddressOf,
     Dereference,
     AssignDeref,
+    StmtStructDecl,
+    StructInit,
+    GetField,
+    AssignField,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +44,7 @@ pub enum CiprType {
     Array(Box<CiprType>),
     Callable(Vec<CiprType>, Box<CiprType>),
     Pointer(Box<CiprType>),
+    Struct(String),
     Unknown,
 }
 

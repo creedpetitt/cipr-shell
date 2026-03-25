@@ -88,6 +88,23 @@ impl<'a> AstPrinter<'a> {
                 let children = [node.children[0], node.children[1]];
                 self.parenthesize("assign_deref", &children)
             }
+            NodeType::StmtStructDecl => {
+                let name = node.token.lexeme.clone();
+                self.parenthesize(&format!("struct {name}"), &node.children)
+            }
+            NodeType::StructInit => {
+                let prev = node.token.lexeme.clone();
+                self.parenthesize(&format!("init {prev}"), &node.children)
+            }
+            NodeType::GetField => {
+                let name = node.token.lexeme.clone();
+                self.parenthesize(&format!("get {name}"), &[node.children[0]])
+            }
+            NodeType::AssignField => {
+                let name = node.token.lexeme.clone();
+                let children = [node.children[0], node.children[1]];
+                self.parenthesize(&format!("set {name}"), &children)
+            }
         }
     }
 

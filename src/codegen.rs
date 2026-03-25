@@ -14,6 +14,7 @@ pub struct Codegen<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
     pub arena: &'a NodeArena,
     pub symbol_table: SymbolTableRef<'ctx>,
+    pub struct_types: std::collections::HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
 }
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
@@ -29,6 +30,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             module,
             arena,
             symbol_table: SymbolTable::new(),
+            struct_types: std::collections::HashMap::new(),
         }
     }
 
@@ -83,6 +85,24 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             NodeType::StmtWhile => self.visit_while(id),
             NodeType::StmtFunction => self.visit_function(id),
             NodeType::StmtReturn => self.visit_return(id),
+            NodeType::StmtStructDecl => {
+                let name = self.arena[id].token.lexeme.clone();
+                let mut field_names = Vec::new();
+                let mut field_types = Vec::new();
+                for child_opt in &self.arena[id].children {
+                    if let Some(child_id) = child_opt {
+                        let field_node = &self.arena[*child_id];
+                        let field_name = field_node.token.lexeme.clone();
+                        field_names.push(field_name);
+                        let field_type = field_node.resolved_type.clone();
+                        let llvm_type = self.get_llvm_type(&field_type)?;
+                        field_types.push(llvm_type.into());
+                    }
+                }
+                let struct_type = self.context.struct_type(&field_types, false);
+                self.struct_types.insert(name, (struct_type, field_names));
+                Ok(())
+            }
             _ => Ok(()), // Skip others for now
         }
     }
@@ -198,6 +218,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             NodeType::AddressOf => self.visit_addressof(id),
             NodeType::Dereference => self.visit_dereference(id),
             NodeType::AssignDeref => self.visit_assign_deref(id),
+            NodeType::StructInit => self.visit_struct_init(id),
+            NodeType::GetField => self.visit_get_field(id),
+            NodeType::AssignField => self.visit_assign_field(id),
             _ => Err(format!("Unsupported evaluation node: {:?}", node_type)),
         }
     }
@@ -612,6 +635,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let inner_llvm = self.get_llvm_type(inner)?;
                 Ok(inner_llvm.ptr_type(inkwell::AddressSpace::from(0)).into())
             }
+            CiprType::Struct(name) => {
+                let (struct_type, _) = self.struct_types.get(name).ok_or_else(|| format!("Unknown struct '{}'", name))?;
+                Ok((*struct_type).into())
+            }
             CiprType::Void | CiprType::Unknown => Ok(self.context.i32_type().into()), // Dummy type for void
             _ => Err(format!("Unsupported LLVM type mapping for: {:?}", resolved_type)),
         }
@@ -658,37 +685,163 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         Ok(self.builder.build_load(elem_ptr, "idx_load").map_err(|e| e.to_string())?)
     }
 
-    fn visit_addressof(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
-        let children = self.arena[id].children.clone();
-        let target_id = children[0].expect("AddressOf missing target");
-        let target_node_type = self.arena[target_id].node_type;
+    fn get_eval_pointer(&mut self, id: NodeId) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+        let node_type = self.arena[id].node_type;
+        match node_type {
+            NodeType::VarExpr => {
+                let name = self.arena[id].token.lexeme.clone();
+                match self.symbol_table.borrow().get(&name) {
+                    Some(p) => Ok(p),
+                    None => Err(format!("Undefined variable accessing pointer: {}", name)),
+                }
+            }
+            NodeType::Dereference => {
+                let inner_id = self.arena[id].children[0].unwrap();
+                Ok(self.evaluate(inner_id)?.into_pointer_value())
+            }
+            NodeType::GetField => {
+                let target_id = self.arena[id].children[0].unwrap();
+                let field_name = self.arena[id].token.lexeme.clone();
+                let target_type = self.arena[target_id].resolved_type.clone();
+                let mut is_ptr = false;
+                let struct_name = match target_type {
+                    CiprType::Struct(name) => name,
+                    CiprType::Pointer(inner) => {
+                        is_ptr = true;
+                        match *inner {
+                            CiprType::Struct(n) => n,
+                            _ => return Err("Dereferencing non-struct".to_string()),
+                        }
+                    },
+                    _ => return Err("Invalid target for GetField pointer".to_string()),
+                };
+                let field_idx = self.get_struct_field_index(&struct_name, &field_name)?;
+                
+                let target_ptr = if is_ptr {
+                    self.evaluate(target_id)?.into_pointer_value()
+                } else {
+                    self.get_eval_pointer(target_id)?
+                };
 
-        if target_node_type == NodeType::VarExpr {
-            let name = self.arena[target_id].token.lexeme.clone();
-            let ptr = match self.symbol_table.borrow().get(&name) {
-                Some(p) => p,
-                None => return Err(format!("Undefined variable in addressof: {}", name)),
-            };
-            Ok(ptr.into())
-        } else if target_node_type == NodeType::Dereference {
-            let deref_children = self.arena[target_id].children.clone();
-            let inner_id = deref_children[0].unwrap();
-            self.evaluate(inner_id)
-        } else if target_node_type == NodeType::IndexGet {
-            let idx_children = self.arena[target_id].children.clone();
-            let arr_id = idx_children[0].unwrap();
-            let index_id = idx_children[1].unwrap();
-            
-            let arr_ptr = self.evaluate(arr_id)?.into_pointer_value();
-            let idx_val = self.evaluate(index_id)?.into_int_value();
-            
-            let elem_ptr = unsafe {
-                self.builder.build_in_bounds_gep(arr_ptr, &[idx_val], "addrof_idx").map_err(|e| e.to_string())?
-            };
-            Ok(elem_ptr.into())
-        } else {
-            Err("Unsupported AddressOf target in codegen".to_string())
+                let (_, _) = self.struct_types.get(&struct_name).unwrap();
+                let field_ptr = self.builder.build_struct_gep(target_ptr, field_idx, "nested_gep").map_err(|e| e.to_string())?;
+                Ok(field_ptr)
+            }
+            NodeType::IndexGet => {
+                let arr_id = self.arena[id].children[0].unwrap();
+                let index_id = self.arena[id].children[1].unwrap();
+                let arr_ptr = self.evaluate(arr_id)?.into_pointer_value();
+                let idx_val = self.evaluate(index_id)?.into_int_value();
+                unsafe {
+                    Ok(self.builder.build_in_bounds_gep(arr_ptr, &[idx_val], "idx_gep").map_err(|e| e.to_string())?)
+                }
+            }
+            _ => Err("Cannot take pointer to ephemeral expression".to_string()),
         }
+    }
+
+    fn visit_addressof(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let target_id = self.arena[id].children[0].unwrap();
+        Ok(self.get_eval_pointer(target_id)?.into())
+    }
+
+    fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<u32, String> {
+        let (_, fields) = self.struct_types.get(struct_name).ok_or_else(|| format!("Unknown struct {}", struct_name))?;
+        for (i, f) in fields.iter().enumerate() {
+            if f == field_name {
+                return Ok(i as u32);
+            }
+        }
+        Err(format!("Field '{}' not found in struct '{}'", field_name, struct_name))
+    }
+
+    fn visit_struct_init(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let cipr_type = self.arena[id].resolved_type.clone();
+        let struct_name = match cipr_type {
+            CiprType::Struct(name) => name,
+            _ => return Err("StructInit resolved to non-struct type".to_string()),
+        };
+
+        let (struct_type, _) = self.struct_types.get(&struct_name).unwrap();
+        let mut struct_val = struct_type.const_zero();
+        
+        for (i, child_opt) in self.arena[id].children.iter().enumerate() {
+            let child_id = child_opt.unwrap();
+            let assign_node = &self.arena[child_id];
+            let val_id = assign_node.children[0].unwrap();
+            let val = self.evaluate(val_id)?;
+            struct_val = self.builder.build_insert_value(struct_val, val, i as u32, "struct_init").map_err(|e| e.to_string())?.into_struct_value();
+        }
+
+        Ok(struct_val.into())
+    }
+
+    fn visit_get_field(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let target_id = self.arena[id].children[0].unwrap();
+        let target_type = self.arena[target_id].resolved_type.clone();
+        let field_name = self.arena[id].token.lexeme.clone();
+        
+        let mut is_ptr = false;
+        let struct_name = match target_type {
+            CiprType::Struct(name) => name,
+            CiprType::Pointer(inner) => {
+                is_ptr = true;
+                match *inner {
+                    CiprType::Struct(name) => name,
+                    _ => return Err("Dereferenced pointer is not a struct".to_string()),
+                }
+            }
+            _ => return Err("Cannot get field on non-struct".to_string()),
+        };
+
+        let field_idx = self.get_struct_field_index(&struct_name, &field_name)?;
+
+        if is_ptr {
+            let ptr_val = self.evaluate(target_id)?.into_pointer_value();
+            let (_, _) = self.struct_types.get(&struct_name).unwrap();
+            let field_ptr = self.builder.build_struct_gep(ptr_val, field_idx, "field_gep").map_err(|e| e.to_string())?;
+            Ok(self.builder.build_load(field_ptr, "field_load").map_err(|e| e.to_string())?)
+        } else {
+            let struct_val = self.evaluate(target_id)?.into_struct_value();
+            Ok(self.builder.build_extract_value(struct_val, field_idx, "field_extract").map_err(|e| e.to_string())?)
+        }
+    }
+
+    fn visit_assign_field(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let target_expr_id = self.arena[id].children[0].unwrap();
+        let val_expr_id = self.arena[id].children[1].unwrap();
+        
+        let target_type = self.arena[target_expr_id].resolved_type.clone();
+        let field_name = self.arena[id].token.lexeme.clone();
+        
+        let mut is_ptr = false;
+        let struct_name = match target_type {
+            CiprType::Struct(name) => name,
+            CiprType::Pointer(inner) => {
+                is_ptr = true;
+                match *inner {
+                    CiprType::Struct(name) => name,
+                    _ => return Err("Dereferenced pointer is not a struct".to_string()),
+                }
+            }
+            _ => return Err("Cannot assign field on non-struct".to_string()),
+        };
+
+        let field_idx = self.get_struct_field_index(&struct_name, &field_name)?;
+        
+        let struct_ptr = if is_ptr {
+            self.evaluate(target_expr_id)?.into_pointer_value()
+        } else {
+            self.get_eval_pointer(target_expr_id)?
+        };
+
+        let (_, _) = self.struct_types.get(&struct_name).unwrap();
+        let field_ptr = self.builder.build_struct_gep(struct_ptr, field_idx, "assign_field_gep").map_err(|e| e.to_string())?;
+        
+        let val = self.evaluate(val_expr_id)?;
+        self.builder.build_store(field_ptr, val).map_err(|e| e.to_string())?;
+        
+        Ok(val)
     }
 
     fn visit_dereference(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
