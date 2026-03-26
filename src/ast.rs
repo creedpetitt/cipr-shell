@@ -28,6 +28,8 @@ pub enum NodeType {
     AddressOf,
     Dereference,
     AssignDeref,
+    StmtExternFn,
+    StmtInclude,
     StmtStructDecl,
     StructInit,
     GetField,

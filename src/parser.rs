@@ -48,6 +48,10 @@ impl<'a> Parser<'a> {
             self.function("function")
         } else if self.match_types(&[TokenType::Let]) {
             self.var_declaration()
+        } else if self.match_types(&[TokenType::Extern]) {
+            self.extern_declaration()
+        } else if self.match_types(&[TokenType::Include]) {
+            self.include_declaration()
         } else {
             self.statement()
         };
@@ -187,6 +191,66 @@ impl<'a> Parser<'a> {
             Value::Null,
             children,
             return_type,
+        ))
+    }
+
+    fn extern_declaration(&mut self) -> Option<NodeId> {
+        self.consume(TokenType::Fn, "Expect 'fn' after 'extern'.")?;
+        let name = self.consume(TokenType::Identifier, "Expect extern function name.")?;
+        self.consume(TokenType::LeftParen, "Expect '(' after extern function name.")?;
+
+        let mut parameters: Vec<Option<NodeId>> = Vec::new();
+        if !self.check(TokenType::RightParen) {
+            loop {
+                let param_name = self.consume(TokenType::Identifier, "Expect parameter name.")?;
+                let mut type_annotation = None;
+                if self.match_types(&[TokenType::Colon]) {
+                    type_annotation = self.parse_type_annotation();
+                }
+
+                let param_node = alloc_node_typed(
+                    self.arena,
+                    NodeType::VarExpr,
+                    param_name,
+                    Value::Null,
+                    vec![],
+                    type_annotation,
+                );
+                parameters.push(Some(param_node));
+                if !self.match_types(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+
+        let mut return_type = None;
+        if self.match_types(&[TokenType::Colon]) {
+            return_type = self.parse_type_annotation();
+        }
+
+        self.consume(TokenType::Semicolon, "Expect ';' after extern declaration.")?;
+
+        Some(alloc_node_typed(
+            self.arena,
+            NodeType::StmtExternFn,
+            name,
+            Value::Null,
+            parameters,
+            return_type,
+        ))
+    }
+
+    fn include_declaration(&mut self) -> Option<NodeId> {
+        let path = self.consume(TokenType::Str, "Expect string path after 'include'.")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after include statement.")?;
+        
+        Some(alloc_node(
+            self.arena,
+            NodeType::StmtInclude,
+            path.clone(),
+            path.literal.clone(),
+            vec![],
         ))
     }
 

@@ -18,10 +18,12 @@ impl Scanner {
         keywords.insert("and", TokenType::And);
         keywords.insert("class", TokenType::Class);
         keywords.insert("else", TokenType::Else);
+        keywords.insert("extern", TokenType::Extern);
         keywords.insert("false", TokenType::False);
         keywords.insert("fn", TokenType::Fn);
         keywords.insert("for", TokenType::For);
         keywords.insert("if", TokenType::If);
+        keywords.insert("include", TokenType::Include);
         keywords.insert("null", TokenType::Null);
         keywords.insert("or", TokenType::Or);
         keywords.insert("return", TokenType::Return);

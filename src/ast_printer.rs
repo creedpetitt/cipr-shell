@@ -96,6 +96,14 @@ impl<'a> AstPrinter<'a> {
                 let prev = node.token.lexeme.clone();
                 self.parenthesize(&format!("init {prev}"), &node.children)
             }
+            NodeType::StmtExternFn => {
+                let name = node.token.lexeme.clone();
+                self.parenthesize(&format!("extern fn {name}"), &node.children)
+            }
+            NodeType::StmtInclude => {
+                let path = node.token.lexeme.clone();
+                self.parenthesize(&format!("include {path}"), &[])
+            }
             NodeType::GetField => {
                 let name = node.token.lexeme.clone();
                 self.parenthesize(&format!("get {name}"), &[node.children[0]])

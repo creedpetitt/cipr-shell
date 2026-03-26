@@ -52,9 +52,12 @@ pub struct TypeChecker<'a> {
 
 impl<'a> TypeChecker<'a> {
     pub fn new(arena: &'a mut NodeArena) -> Self {
+        let env = TypeEnv::new();
+        env.borrow_mut().define("print", CiprType::Callable(vec![CiprType::Unknown], Box::new(CiprType::Void)));
+        
         Self {
             arena,
-            env: TypeEnv::new(),
+            env,
             had_error: false,
             current_return_type: None,
             structs: HashMap::new(),
@@ -114,6 +117,8 @@ impl<'a> TypeChecker<'a> {
             NodeType::StructInit => self.check_struct_init(id),
             NodeType::GetField => self.check_get_field(id),
             NodeType::AssignField => self.check_assign_field(id),
+            NodeType::StmtExternFn => self.check_extern_fn(id),
+            NodeType::StmtInclude => self.check_include(id),
             _ => CiprType::Unknown,
         };
 
@@ -223,6 +228,30 @@ impl<'a> TypeChecker<'a> {
         self.current_return_type = prev_ret;
         self.env = prev_env;
 
+        CiprType::Void
+    }
+
+    fn check_extern_fn(&mut self, id: NodeId) -> CiprType {
+        let name = self.arena[id].token.lexeme.clone();
+        let children = self.arena[id].children.clone();
+        let ret_ann = self.arena[id].type_annotation.clone();
+        let ret_type = Self::parse_type_annotation(&ret_ann);
+
+        let mut param_types = Vec::new();
+        for child_opt in children {
+            if let Some(param_id) = child_opt {
+                let p_ann = self.arena[param_id].type_annotation.clone();
+                let p_type = Self::parse_type_annotation(&p_ann);
+                param_types.push(p_type);
+            }
+        }
+        
+        let func_type = CiprType::Callable(param_types, Box::new(ret_type));
+        self.env.borrow_mut().define(&name, func_type);
+        CiprType::Void
+    }
+
+    fn check_include(&mut self, _id: NodeId) -> CiprType {
         CiprType::Void
     }
 
