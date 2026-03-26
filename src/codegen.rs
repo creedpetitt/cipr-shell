@@ -72,6 +72,14 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 self.symbol_table.exit_scope();
                 Ok(())
             }
+            NodeType::StmtInclude => {
+                let children = self.arena[id].children.clone();
+                for c in children.iter().flatten() {
+                    self.execute(*c)?;
+                }
+                Ok(())
+            }
+            NodeType::StmtExternFn => self.visit_extern_fn(id),
             NodeType::StmtVarDecl => self.visit_var_decl(id),
             NodeType::StmtExpr => {
                 let children = self.arena[id].children.clone();
@@ -295,13 +303,50 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         Ok(self.context.i32_type().const_int(0, false).into())
     }
 
+    fn visit_extern_fn(&mut self, id: NodeId) -> Result<(), String> {
+        let name = self.arena[id].token.lexeme.clone();
+
+        let (param_list, ret_type_enum) = match &self.arena[id].resolved_type {
+            crate::ast::CiprType::Callable(params, ret) => (params.clone(), *ret.clone()),
+            _ => return Err("Expected Callable type for extern fn".to_string()),
+        };
+
+        let mut param_types = Vec::new();
+        for p in param_list {
+            let p_type: inkwell::types::BasicMetadataTypeEnum = self.get_llvm_type(&p)?.into();
+            param_types.push(p_type);
+        }
+
+        let fn_type = match ret_type_enum {
+            crate::ast::CiprType::Void => self.context.void_type().fn_type(&param_types, false),
+            t => {
+                let basic = self.get_llvm_type(&t)?;
+                match basic {
+                    inkwell::types::BasicTypeEnum::IntType(i) => i.fn_type(&param_types, false),
+                    inkwell::types::BasicTypeEnum::FloatType(f) => f.fn_type(&param_types, false),
+                    inkwell::types::BasicTypeEnum::PointerType(p) => p.fn_type(&param_types, false),
+                    inkwell::types::BasicTypeEnum::StructType(s) => s.fn_type(&param_types, false),
+                    _ => self.context.i32_type().fn_type(&param_types, false),
+                }
+            }
+        };
+
+        self.module.add_function(&name, fn_type, Some(inkwell::module::Linkage::External));
+        Ok(())
+    }
+
     fn visit_function(&mut self, id: NodeId) -> Result<(), String> {
         let name = self.arena[id].token.lexeme.clone();
         let children = self.arena[id].children.clone();
         let param_count = children.len() - 1;
 
         // Determine return type
-        let ret_type = self.get_llvm_type(&self.arena[id].resolved_type)
+        let ret_type_enum = match &self.arena[id].resolved_type {
+            crate::ast::CiprType::Callable(_, ret) => *ret.clone(),
+            _ => crate::ast::CiprType::Void,
+        };
+        
+        let ret_type = self.get_llvm_type(&ret_type_enum)
             .unwrap_or_else(|_| self.context.i32_type().into());
 
         // Determine parameter types

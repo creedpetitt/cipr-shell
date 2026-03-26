@@ -1,20 +1,23 @@
 use crate::ast::{alloc_node, alloc_node_typed, NodeArena, NodeId, NodeType};
 use crate::token::{Token, TokenType, Value};
+use std::collections::HashSet;
 
 pub struct Parser<'a> {
     tokens: &'a [Token],
-    arena: &'a mut NodeArena,
+    pub arena: &'a mut NodeArena,
     current: usize,
     pub had_error: bool,
+    visited_files: &'a mut HashSet<String>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: &'a [Token], arena: &'a mut NodeArena) -> Self {
+    pub fn new(tokens: &'a [Token], arena: &'a mut NodeArena, visited_files: &'a mut HashSet<String>) -> Self {
         Self {
             tokens,
             arena,
             current: 0,
             had_error: false,
+            visited_files,
         }
     }
 
@@ -245,12 +248,42 @@ impl<'a> Parser<'a> {
         let path = self.consume(TokenType::Str, "Expect string path after 'include'.")?;
         self.consume(TokenType::Semicolon, "Expect ';' after include statement.")?;
         
+        let path_str = match &path.literal {
+            Value::Str(s) => s.clone(),
+            _ => return None,
+        };
+
+        let mut children = Vec::new();
+
+        if self.visited_files.insert(path_str.clone()) {
+            let source = std::fs::read_to_string(&path_str).unwrap_or_else(|_| {
+                println!("[line {}] Error: Could not read included file: {}", path.line, path_str);
+                "".to_string()
+            });
+
+            if !source.is_empty() {
+                let (tokens, scan_error) = crate::scanner::Scanner::new(&source).scan_tokens();
+                if scan_error {
+                    println!("[line {}] Error: Included file has scanner errors.", path.line);
+                } else {
+                    let root_id = {
+                        let mut sub_parser = Parser::new(&tokens, &mut *self.arena, &mut *self.visited_files);
+                        sub_parser.parse()
+                    };
+                    
+                    if let Some(id) = root_id {
+                        children = self.arena[id].children.clone();
+                    }
+                }
+            }
+        }
+
         Some(alloc_node(
             self.arena,
             NodeType::StmtInclude,
             path.clone(),
-            path.literal.clone(),
-            vec![],
+            Value::Null,
+            children,
         ))
     }
 

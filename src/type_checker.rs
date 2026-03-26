@@ -218,7 +218,7 @@ impl<'a> TypeChecker<'a> {
         self.current_return_type = prev_ret;
         self.env.exit_scope();
 
-        CiprType::Void
+        func_type
     }
 
     fn check_extern_fn(&mut self, id: NodeId) -> CiprType {
@@ -227,21 +227,28 @@ impl<'a> TypeChecker<'a> {
         let ret_ann = self.arena[id].type_annotation.clone();
         let ret_type = Self::parse_type_annotation(&ret_ann);
 
+        self.arena[id].resolved_type = ret_type.clone();
+
         let mut param_types = Vec::new();
         for child_opt in children {
             if let Some(param_id) = child_opt {
                 let p_ann = self.arena[param_id].type_annotation.clone();
                 let p_type = Self::parse_type_annotation(&p_ann);
+                self.arena[param_id].resolved_type = p_type.clone();
                 param_types.push(p_type);
             }
         }
         
         let func_type = CiprType::Callable(param_types, Box::new(ret_type));
-        self.env.define(&name, func_type);
-        CiprType::Void
+        self.env.define(&name, func_type.clone());
+        func_type
     }
 
-    fn check_include(&mut self, _id: NodeId) -> CiprType {
+    fn check_include(&mut self, id: NodeId) -> CiprType {
+        let children = self.arena[id].children.clone();
+        for child in children.iter().flatten() {
+            self.check(*child);
+        }
         CiprType::Void
     }
 
@@ -627,8 +634,8 @@ impl<'a> TypeChecker<'a> {
                 fields.push((field_name, field_type));
             }
         }
-        self.structs.insert(name, fields);
-        CiprType::Void
+        self.structs.insert(name.clone(), fields);
+        CiprType::Struct(name)
     }
 
     fn check_struct_init(&mut self, id: NodeId) -> CiprType {

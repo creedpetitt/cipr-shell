@@ -82,7 +82,8 @@ impl Core {
             return Err("Scanner errors occurred.".to_string());
         }
 
-        let mut parser = Parser::new(&tokens, &mut self.arena);
+        let mut visited_files = std::collections::HashSet::new();
+        let mut parser = Parser::new(&tokens, &mut self.arena, &mut visited_files);
         let root = parser.parse();
 
         if parser.had_error {
