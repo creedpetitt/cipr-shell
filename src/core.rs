@@ -1,9 +1,6 @@
-use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
-
-use inkwell::context::Context;
 
 use crate::ast::NodeArena;
 use crate::codegen::Codegen;
@@ -96,7 +93,6 @@ impl Core {
 
         if let Some(root_id) = root {
             let mut type_checker = TypeChecker::new(&mut self.interpreter.arena);
-            crate::native::register_types(&mut type_checker);
             type_checker.check(root_id);
             if type_checker.had_error {
                 return Err("Type Error occurred.".to_string());

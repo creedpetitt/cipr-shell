@@ -4,7 +4,6 @@ mod codegen;
 mod core;
 mod environment;
 mod interpreter;
-mod native;
 mod parser;
 mod scanner;
 mod symbol_table;

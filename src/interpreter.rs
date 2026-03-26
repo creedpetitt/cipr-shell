@@ -174,7 +174,6 @@ impl Callable for NamedFunction {
 
 pub struct Interpreter {
     pub arena: NodeArena,
-    pub globals: EnvRef,
     environment: EnvRef,
 }
 
@@ -183,19 +182,11 @@ impl Interpreter {
         let globals = Environment::new();
         let environment = Rc::clone(&globals);
 
-        let mut interp = Self {
+        let interp = Self {
             arena,
-            globals: Rc::clone(&globals),
             environment,
         };
-        crate::native::register_all(&mut interp);
         interp
-    }
-
-    pub fn define_global(&mut self, name: &str, callable: Rc<dyn Callable>) {
-        self.globals
-            .borrow_mut()
-            .define(name, RuntimeValue::Callable(callable));
     }
 
     pub fn interpret(&mut self, root: NodeId) {

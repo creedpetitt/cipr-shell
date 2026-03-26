@@ -232,55 +232,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
         if callee_name == "print" {
             let arg_id = children[1].expect("Print missing argument");
-            let arg_val = self.evaluate(arg_id)?;
-            let arg_type = &self.arena[arg_id].resolved_type;
-
-            let (ext_name, fn_type, args) = match arg_type {
-                CiprType::Str => {
-                    let struct_type = self.get_llvm_type(&CiprType::Str)?;
-                    let ftype = self.context.void_type().fn_type(&[struct_type.into()], false);
-                    ("cipr_print_str", ftype, vec![arg_val.into()])
-                }
-                CiprType::Int => {
-                    let ftype = self.context.void_type().fn_type(&[self.context.i64_type().into()], false);
-                    ("cipr_print_int", ftype, vec![arg_val.into()])
-                }
-                CiprType::Float => {
-                    let ftype = self.context.void_type().fn_type(&[self.context.f64_type().into()], false);
-                    ("cipr_print_float", ftype, vec![arg_val.into()])
-                }
-                CiprType::Bool => {
-                    let ftype = self.context.void_type().fn_type(&[self.context.bool_type().into()], false);
-                    ("cipr_print_bool", ftype, vec![arg_val.into()])
-                }
-                _ => return Err(format!("Unsupported type for print: {:?}", arg_type)),
-            };
-
-            let print_fn = match self.module.get_function(ext_name) {
-                Some(f) => f,
-                None => self.module.add_function(ext_name, fn_type, None),
-            };
-
-            self.builder.build_call(print_fn, &args, "").map_err(|e| e.to_string())?;
-            return Ok(self.context.i32_type().const_int(0, false).into());
+            return self.emit_print_call(arg_id);
         }
 
-        if callee_name == "time" {
-            let ext_name = "cipr_time";
-            let ftype = self.context.f64_type().fn_type(&[], false);
-            let time_fn = match self.module.get_function(ext_name) {
-                Some(f) => f,
-                None => self.module.add_function(ext_name, ftype, None),
-            };
-
-            let call_site = self.builder.build_call(time_fn, &[], "timetmp").map_err(|e| e.to_string())?;
-            return match call_site.try_as_basic_value() {
-                inkwell::values::ValueKind::Basic(v) => Ok(v),
-                _ => return Err("cipr_time did not return basic value".to_string())
-            };
-        }
-
-        // Handle user-defined function calls
+        // Handle user-defined function calls and extern functions via Linker
         let function = self
             .module
             .get_function(&callee_name)
@@ -305,6 +260,40 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 Ok(self.context.i32_type().const_int(0, false).into())
             }
         }
+    }
+
+    fn emit_print_call(&mut self, arg_id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let arg_val = self.evaluate(arg_id)?;
+        let arg_type = &self.arena[arg_id].resolved_type;
+
+        let (ext_name, fn_type, args) = match arg_type {
+            CiprType::Str => {
+                let struct_type = self.get_llvm_type(&CiprType::Str)?;
+                let ftype = self.context.void_type().fn_type(&[struct_type.into()], false);
+                ("cipr_print_str", ftype, vec![arg_val.into()])
+            }
+            CiprType::Int => {
+                let ftype = self.context.void_type().fn_type(&[self.context.i64_type().into()], false);
+                ("cipr_print_int", ftype, vec![arg_val.into()])
+            }
+            CiprType::Float => {
+                let ftype = self.context.void_type().fn_type(&[self.context.f64_type().into()], false);
+                ("cipr_print_float", ftype, vec![arg_val.into()])
+            }
+            CiprType::Bool => {
+                let ftype = self.context.void_type().fn_type(&[self.context.bool_type().into()], false);
+                ("cipr_print_bool", ftype, vec![arg_val.into()])
+            }
+            _ => return Err(format!("Unsupported type for print: {:?}", arg_type)),
+        };
+
+        let print_fn = match self.module.get_function(ext_name) {
+            Some(f) => f,
+            None => self.module.add_function(ext_name, fn_type, None),
+        };
+
+        self.builder.build_call(print_fn, &args, "").map_err(|e| e.to_string())?;
+        Ok(self.context.i32_type().const_int(0, false).into())
     }
 
     fn visit_function(&mut self, id: NodeId) -> Result<(), String> {

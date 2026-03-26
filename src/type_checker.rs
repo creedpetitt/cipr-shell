@@ -61,10 +61,6 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub fn define_global(&mut self, name: &str, t: CiprType) {
-        self.env.borrow_mut().define(name, t);
-    }
-
     fn error(&mut self, line: usize, message: &str) {
         eprintln!("[line {}] Type Error: {}", line, message);
         self.had_error = true;
