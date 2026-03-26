@@ -127,10 +127,23 @@ impl Core {
                     return Err("llc-14 compilation failed!".to_string());
                 }
 
-                // Invoke gcc to link object file with C runtime
+                // Invoke gcc to link object file with all C runtime modules
                 println!("C Runtime Linked...");
+                
+                let mut gcc_args = vec![obj_path.clone()];
+                if let Ok(entries) = std::fs::read_dir("src/runtime") {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().and_then(|s| s.to_str()) == Some("c") {
+                            gcc_args.push(path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                gcc_args.push("-o".to_string());
+                gcc_args.push(out_bin.to_string());
+
                 let status_gcc = std::process::Command::new("gcc")
-                    .args([&obj_path, "src/runtime/runtime.c", "-o", out_bin])
+                    .args(&gcc_args)
                     .status()
                     .map_err(|e| format!("Failed to invoke gcc: {}", e))?;
 
