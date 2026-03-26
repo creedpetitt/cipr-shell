@@ -5,7 +5,7 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType};
 use inkwell::values::BasicValueEnum;
 
 use crate::ast::{CiprType, NodeArena, NodeId, NodeType};
-use crate::symbol_table::{SymbolTable, SymbolTableRef};
+use crate::symbol_table::SymbolTable;
 use crate::token::{TokenType, Value};
 
 pub struct Codegen<'a, 'ctx> {
@@ -13,7 +13,7 @@ pub struct Codegen<'a, 'ctx> {
     pub builder: &'a Builder<'ctx>,
     pub module: &'a Module<'ctx>,
     pub arena: &'a NodeArena,
-    pub symbol_table: SymbolTableRef<'ctx>,
+    pub symbol_table: SymbolTable<'ctx>,
     pub struct_types: std::collections::HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
 }
 
@@ -62,15 +62,14 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
         match node_type {
             NodeType::StmtList | NodeType::StmtBlock => {
-                let prev_env = std::rc::Rc::clone(&self.symbol_table);
-                self.symbol_table = SymbolTable::with_enclosing(&prev_env);
+                self.symbol_table.enter_scope();
 
                 let children = self.arena[id].children.clone();
                 for c in children.iter().flatten() {
                     self.execute(*c)?;
                 }
 
-                self.symbol_table = prev_env;
+                self.symbol_table.exit_scope();
                 Ok(())
             }
             NodeType::StmtVarDecl => self.visit_var_decl(id),
@@ -329,8 +328,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         self.builder.position_at_end(entry_bb);
 
         // New scope for function body
-        let prev_env = std::rc::Rc::clone(&self.symbol_table);
-        self.symbol_table = SymbolTable::with_enclosing(&prev_env);
+        self.symbol_table.enter_scope();
 
         // Allocate and store parameters
         for (i, arg) in function.get_param_iter().enumerate() {
@@ -342,7 +340,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     .build_alloca(p_type, &p_name)
                     .map_err(|e| e.to_string())?;
                 self.builder.build_store(alloca, arg).map_err(|e| e.to_string())?;
-                self.symbol_table.borrow_mut().define(&p_name, alloca);
+                self.symbol_table.define(&p_name, alloca);
             }
         }
 
@@ -366,7 +364,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         }
 
         // Restore scope and insertion point
-        self.symbol_table = prev_env;
+        self.symbol_table.exit_scope();
         if let Some(bb) = original_bb {
             self.builder.position_at_end(bb);
         }
@@ -402,7 +400,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let alloca = self.builder.build_alloca(llvm_type, &name).map_err(|e| e.to_string())?;
 
         // Store it in the symbol table so we can find the pointer later
-        self.symbol_table.borrow_mut().define(&name, alloca);
+        self.symbol_table.define(&name, alloca);
 
         // If there's an initializer, evaluate it and store the result in the allocated pointer
         let children = self.arena[id].children.clone();
@@ -418,7 +416,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let name = self.arena[id].token.lexeme.clone();
         let children = self.arena[id].children.clone();
 
-        let ptr = match self.symbol_table.borrow().get(&name) {
+        let ptr = match self.symbol_table.get(&name) {
             Some(p) => p,
             None => return Err(format!("Undefined variable in codegen: {}", name)),
         };
@@ -436,7 +434,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     fn visit_var_expr(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
         let name = self.arena[id].token.lexeme.clone();
 
-        let ptr = match self.symbol_table.borrow().get(&name) {
+        let ptr = match self.symbol_table.get(&name) {
             Some(p) => p,
             None => return Err(format!("Undefined variable in codegen: {}", name)),
         };
@@ -679,7 +677,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         match node_type {
             NodeType::VarExpr => {
                 let name = self.arena[id].token.lexeme.clone();
-                match self.symbol_table.borrow().get(&name) {
+                match self.symbol_table.get(&name) {
                     Some(p) => Ok(p),
                     None => Err(format!("Undefined variable accessing pointer: {}", name)),
                 }

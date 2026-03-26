@@ -4,20 +4,18 @@ use std::path::Path;
 
 use crate::ast::NodeArena;
 use crate::codegen::Codegen;
-use crate::interpreter::Interpreter;
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use crate::type_checker::TypeChecker;
 
 pub struct Core {
-    interpreter: Interpreter,
+    pub arena: NodeArena,
 }
 
 impl Core {
     pub fn new() -> Self {
-        let arena = NodeArena::new();
         Self {
-            interpreter: Interpreter::new(arena),
+            arena: NodeArena::new(),
         }
     }
 
@@ -84,7 +82,7 @@ impl Core {
             return Err("Scanner errors occurred.".to_string());
         }
 
-        let mut parser = Parser::new(&tokens, &mut self.interpreter.arena);
+        let mut parser = Parser::new(&tokens, &mut self.arena);
         let root = parser.parse();
 
         if parser.had_error {
@@ -92,34 +90,33 @@ impl Core {
         }
 
         if let Some(root_id) = root {
-            let mut type_checker = TypeChecker::new(&mut self.interpreter.arena);
+            let mut type_checker = TypeChecker::new(&mut self.arena);
             type_checker.check(root_id);
             if type_checker.had_error {
                 return Err("Type Error occurred.".to_string());
             }
-
-            if build_mode {
                 let context = inkwell::context::Context::create();
                 let module = context.create_module("main");
                 let builder = context.create_builder();
 
-                let mut codegen = Codegen::new(&context, &builder, &module, &self.interpreter.arena);
+                let mut codegen = Codegen::new(&context, &builder, &module, &self.arena);
                 if let Err(e) = codegen.compile(root_id) {
                     return Err(format!("Codegen Error: {}", e));
                 }
 
                 // Verify module
                 if let Err(e) = module.verify() {
-                    return Err(format!("LLVM Verification Error: {}", e.to_string()));
+                    let err_str: inkwell::support::LLVMString = e;
+                    return Err(format!("LLVM Verification Error: {}", err_str.to_string()));
                 }
 
                 // Write LLVM IR to a file
                 let ir_path = format!("{}.ll", out_bin);
-                module.print_to_file(&ir_path).map_err(|e| e.to_string())?;
+                module.print_to_file(&ir_path).map_err(|e: inkwell::support::LLVMString| e.to_string())?;
 
                 // Invoke llc-14 to compile IR to object file
                 let obj_path = format!("{}.o", out_bin);
-                println!("🔨 Compiling IR to object code...");
+                println!("Compiling IR to object code...");
                 let status_llc = std::process::Command::new("llc-14")
                     .args(["-O3", "-filetype=obj", "-relocation-model=pic", &ir_path, "-o", &obj_path])
                     .status()
@@ -130,7 +127,7 @@ impl Core {
                 }
 
                 // Invoke gcc to link object file with C runtime
-                println!("Linking with Akari C Runtime...");
+                println!("C Runtime Linked...");
                 let status_gcc = std::process::Command::new("gcc")
                     .args([&obj_path, "src/runtime/runtime.c", "-o", out_bin])
                     .status()
@@ -140,12 +137,25 @@ impl Core {
                     return Err("gcc linking failed!".to_string());
                 }
 
-                println!("Build finished: ./{}", out_bin);
+                if !build_mode {
+                    // Execute the built binary directly
+                    let status_run = std::process::Command::new(format!("./{}", out_bin))
+                        .status()
+                        .map_err(|e| format!("Failed to run executable: {}", e))?;
+                    
+                    if !status_run.success() {
+                        return Err("Program execution failed.".to_string());
+                    }
+
+                    // Clean up intermediate files and binary
+                    let _ = std::fs::remove_file(ir_path);
+                    let _ = std::fs::remove_file(obj_path);
+                    let _ = std::fs::remove_file(out_bin);
+                } else {
+                    println!("Build finished: ./{}", out_bin);
+                }
+
                 Ok(())
-            } else {
-                self.interpreter.interpret(root_id);
-                Ok(())
-            }
         } else {
             Ok(())
         }

@@ -2,8 +2,6 @@ mod ast;
 mod ast_printer;
 mod codegen;
 mod core;
-mod environment;
-mod interpreter;
 mod parser;
 mod scanner;
 mod symbol_table;

@@ -1,42 +1,36 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use crate::ast::{CiprType, NodeArena, NodeId, NodeType};
 use crate::token::{TokenType, Value};
 
-pub type TypeEnvRef = Rc<RefCell<TypeEnv>>;
-
 pub struct TypeEnv {
-    values: HashMap<String, CiprType>,
-    enclosing: Option<TypeEnvRef>,
+    scopes: Vec<HashMap<String, CiprType>>,
 }
 
 impl TypeEnv {
-    pub fn new() -> TypeEnvRef {
-        Rc::new(RefCell::new(Self {
-            values: HashMap::new(),
-            enclosing: None,
-        }))
+    pub fn new() -> Self {
+        Self {
+            scopes: vec![HashMap::new()],
+        }
     }
 
-    pub fn with_enclosing(enclosing: &TypeEnvRef) -> TypeEnvRef {
-        Rc::new(RefCell::new(Self {
-            values: HashMap::new(),
-            enclosing: Some(Rc::clone(enclosing)),
-        }))
+    pub fn enter_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    pub fn exit_scope(&mut self) {
+        self.scopes.pop();
     }
 
     pub fn define(&mut self, name: &str, value_type: CiprType) {
-        self.values.insert(name.to_string(), value_type);
+        self.scopes.last_mut().unwrap().insert(name.to_string(), value_type);
     }
 
     pub fn get(&self, name: &str) -> Option<CiprType> {
-        if let Some(val) = self.values.get(name) {
-            return Some(val.clone());
-        }
-        if let Some(ref enc) = self.enclosing {
-            return enc.borrow().get(name);
+        for scope in self.scopes.iter().rev() {
+            if let Some(val) = scope.get(name) {
+                return Some(val.clone());
+            }
         }
         None
     }
@@ -44,7 +38,7 @@ impl TypeEnv {
 
 pub struct TypeChecker<'a> {
     pub arena: &'a mut NodeArena,
-    pub env: TypeEnvRef,
+    pub env: TypeEnv,
     pub had_error: bool,
     current_return_type: Option<CiprType>,
     pub structs: HashMap<String, Vec<(String, CiprType)>>,
@@ -52,8 +46,8 @@ pub struct TypeChecker<'a> {
 
 impl<'a> TypeChecker<'a> {
     pub fn new(arena: &'a mut NodeArena) -> Self {
-        let env = TypeEnv::new();
-        env.borrow_mut().define("print", CiprType::Callable(vec![CiprType::Unknown], Box::new(CiprType::Void)));
+        let mut env = TypeEnv::new();
+        env.define("print", CiprType::Callable(vec![CiprType::Unknown], Box::new(CiprType::Void)));
         
         Self {
             arena,
@@ -135,15 +129,14 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn check_block_stmt(&mut self, id: NodeId) -> CiprType {
-        let prev_env = Rc::clone(&self.env);
-        self.env = TypeEnv::with_enclosing(&prev_env);
+        self.env.enter_scope();
 
         let children = self.arena[id].children.clone();
         for child in children.iter().flatten() {
             self.check(*child);
         }
 
-        self.env = prev_env;
+        self.env.exit_scope();
         CiprType::Void
     }
 
@@ -180,7 +173,7 @@ impl<'a> TypeChecker<'a> {
             CiprType::Unknown
         };
 
-        self.env.borrow_mut().define(&name, final_type.clone());
+        self.env.define(&name, final_type.clone());
         final_type
     }
 
@@ -202,18 +195,15 @@ impl<'a> TypeChecker<'a> {
         }
 
         let func_type = CiprType::Callable(param_types.clone(), Box::new(ret_type.clone()));
-        self.env.borrow_mut().define(&name, func_type.clone());
+        self.env.define(&name, func_type.clone());
 
         // Check body
-        let prev_env = Rc::clone(&self.env);
-        self.env = TypeEnv::with_enclosing(&prev_env);
+        self.env.enter_scope();
 
         for i in 0..param_count {
             if let Some(param_id) = children[i] {
                 let p_name = self.arena[param_id].token.lexeme.clone();
-                self.env
-                    .borrow_mut()
-                    .define(&p_name, param_types[i].clone());
+                self.env.define(&p_name, param_types[i].clone());
                 self.arena[param_id].resolved_type = param_types[i].clone();
             }
         }
@@ -226,7 +216,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         self.current_return_type = prev_ret;
-        self.env = prev_env;
+        self.env.exit_scope();
 
         CiprType::Void
     }
@@ -247,7 +237,7 @@ impl<'a> TypeChecker<'a> {
         }
         
         let func_type = CiprType::Callable(param_types, Box::new(ret_type));
-        self.env.borrow_mut().define(&name, func_type);
+        self.env.define(&name, func_type);
         CiprType::Void
     }
 
@@ -333,7 +323,7 @@ impl<'a> TypeChecker<'a> {
     fn check_var_expr(&mut self, id: NodeId) -> CiprType {
         let name = self.arena[id].token.lexeme.clone();
         let line = self.arena[id].token.line;
-        let t_opt = self.env.borrow().get(&name);
+        let t_opt = self.env.get(&name);
         if let Some(t) = t_opt {
             t
         } else {
@@ -353,7 +343,7 @@ impl<'a> TypeChecker<'a> {
             CiprType::Unknown
         };
 
-        let var_type_opt = self.env.borrow().get(&name);
+        let var_type_opt = self.env.get(&name);
         if let Some(var_type) = var_type_opt {
             if var_type != CiprType::Unknown
                 && val_type != CiprType::Unknown
