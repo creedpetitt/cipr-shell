@@ -115,6 +115,10 @@ impl<'a> TypeChecker<'a> {
             NodeType::StmtInclude => self.check_include(id),
             NodeType::ExprNew => self.check_new(id),
             NodeType::StmtDelete => self.check_delete(id),
+            NodeType::Grouping => {
+                let child = self.arena[id].children[0].expect("Grouping node has no child");
+                self.check(child)
+            }
             _ => CiprType::Unknown,
         };
 
