@@ -34,6 +34,8 @@ pub enum NodeType {
     StructInit,
     GetField,
     AssignField,
+    ExprNew,
+    StmtDelete,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

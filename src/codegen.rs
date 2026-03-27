@@ -35,6 +35,16 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     pub fn compile(&mut self, root_id: NodeId) -> Result<(), String> {
+        let i64_type = self.context.i64_type();
+        let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
+        let void_type = self.context.void_type();
+        
+        let malloc_type = ptr_type.fn_type(&[i64_type.into()], false);
+        self.module.add_function("cipr_malloc", malloc_type, Some(inkwell::module::Linkage::External));
+
+        let free_type = void_type.fn_type(&[ptr_type.into()], false);
+        self.module.add_function("cipr_free", free_type, Some(inkwell::module::Linkage::External));
+
         // Create the top-level `main` function (returns i32)
         let i32_type = self.context.i32_type();
         let fn_type = i32_type.fn_type(&[], false);
@@ -88,6 +98,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
                 Ok(())
             }
+            NodeType::StmtDelete => self.visit_delete(id),
             NodeType::StmtIf => self.visit_if(id),
             NodeType::StmtWhile => self.visit_while(id),
             NodeType::StmtFunction => self.visit_function(id),
@@ -226,6 +237,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             NodeType::Dereference => self.visit_dereference(id),
             NodeType::AssignDeref => self.visit_assign_deref(id),
             NodeType::StructInit => self.visit_struct_init(id),
+            NodeType::ExprNew => self.visit_new(id),
             NodeType::GetField => self.visit_get_field(id),
             NodeType::AssignField => self.visit_assign_field(id),
             _ => Err(format!("Unsupported evaluation node: {:?}", node_type)),
@@ -806,6 +818,52 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         }
 
         Ok(struct_val.into())
+    }
+
+    fn visit_new(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+        let struct_name = self.arena[id].token.lexeme.clone();
+        let (struct_type, _) = self.struct_types.get(&struct_name).unwrap();
+        
+        let alloc_size_bytes = struct_type.size_of().unwrap();
+        let malloc_fn = self.module.get_function("cipr_malloc").unwrap();
+        
+        let call_site = self.builder.build_call(malloc_fn, &[alloc_size_bytes.into()], "malloc_call")
+            .map_err(|e| e.to_string())?;
+            
+        let raw_ptr = match call_site.try_as_basic_value() {
+            inkwell::values::ValueKind::Basic(v) => v.into_pointer_value(),
+            _ => return Err("cipr_malloc did not return a pointer".to_string()),
+        };
+        
+        // Cast raw i8* pointer to Struct pointer type
+        let struct_ptr_type = struct_type.ptr_type(inkwell::AddressSpace::from(0));
+        let struct_ptr = self.builder.build_pointer_cast(raw_ptr, struct_ptr_type, "new_ptr_cast").unwrap();
+
+        // Initialize fields with args
+        for (i, child_opt) in self.arena[id].children.iter().enumerate() {
+            if let Some(arg_id) = child_opt {
+                let val = self.evaluate(*arg_id)?;
+                let field_ptr = self.builder.build_struct_gep(struct_ptr, i as u32, "new_gep")
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_store(field_ptr, val).map_err(|e| e.to_string())?;
+            }
+        }
+
+        Ok(struct_ptr.into())
+    }
+
+    fn visit_delete(&mut self, id: NodeId) -> Result<(), String> {
+        let child_id = self.arena[id].children[0].unwrap();
+        let val_ptr = self.evaluate(child_id)?.into_pointer_value();
+        
+        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
+        let raw_ptr = self.builder.build_pointer_cast(val_ptr, i8_ptr_type, "delete_ptr_cast").unwrap();
+
+        let free_fn = self.module.get_function("cipr_free").unwrap();
+        self.builder.build_call(free_fn, &[raw_ptr.into()], "free_call")
+            .map_err(|e| e.to_string())?;
+            
+        Ok(())
     }
 
     fn visit_get_field(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {

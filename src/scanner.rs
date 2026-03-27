@@ -26,6 +26,8 @@ impl Scanner {
         keywords.insert("include", TokenType::Include);
         keywords.insert("null", TokenType::Null);
         keywords.insert("or", TokenType::Or);
+        keywords.insert("new", TokenType::New);
+        keywords.insert("delete", TokenType::Delete);
         keywords.insert("return", TokenType::Return);
         keywords.insert("struct", TokenType::Struct);
         keywords.insert("super", TokenType::Super);

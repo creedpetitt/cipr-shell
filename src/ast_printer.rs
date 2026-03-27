@@ -113,6 +113,13 @@ impl<'a> AstPrinter<'a> {
                 let children = [node.children[0], node.children[1]];
                 self.parenthesize(&format!("set {name}"), &children)
             }
+            NodeType::ExprNew => {
+                let name = node.token.lexeme.clone();
+                self.parenthesize(&format!("new {name}"), &node.children)
+            }
+            NodeType::StmtDelete => {
+                self.parenthesize("delete", &[node.children[0]])
+            }
         }
     }
 

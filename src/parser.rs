@@ -302,6 +302,9 @@ impl<'a> Parser<'a> {
         if self.match_types(&[TokenType::Return]) {
             return self.return_statement();
         }
+        if self.match_types(&[TokenType::Delete]) {
+            return self.delete_statement();
+        }
         if self.match_types(&[TokenType::LeftBrace]) {
             let statements = self.block()?;
             let prev = self.previous().clone();
@@ -327,6 +330,19 @@ impl<'a> Parser<'a> {
             prev,
             Value::Null,
             vec![expr],
+        ))
+    }
+
+    fn delete_statement(&mut self) -> Option<NodeId> {
+        let keyword = self.previous().clone();
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expected ';' after expression to delete.")?;
+        Some(alloc_node(
+            self.arena,
+            NodeType::StmtDelete,
+            keyword,
+            Value::Null,
+            vec![Some(value)],
         ))
     }
 
@@ -767,6 +783,30 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Option<NodeId> {
+        if self.match_types(&[TokenType::New]) {
+            let struct_name = self.consume(TokenType::Identifier, "Expect struct name after 'new'.")?;
+            self.consume(TokenType::LeftParen, "Expect '(' after struct name.")?;
+            
+            let mut args = Vec::new();
+            if !self.check(TokenType::RightParen) {
+                loop {
+                    args.push(Some(self.expression()?));
+                    if !self.match_types(&[TokenType::Comma]) {
+                        break;
+                    }
+                }
+            }
+            self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
+            
+            return Some(alloc_node(
+                self.arena,
+                NodeType::ExprNew,
+                struct_name,
+                Value::Null,
+                args,
+            ));
+        }
+
         if self.match_types(&[TokenType::False]) {
             let prev = self.previous().clone();
             return Some(alloc_node(

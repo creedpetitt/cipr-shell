@@ -48,6 +48,8 @@ pub enum TokenType {
     Include,
     Null,
     Or,
+    New,
+    Delete,
     Return,
     Struct,
     Super,
