@@ -1,4 +1,23 @@
-// std/file - File reading and writing
-// Usage: include "src/lib/std/file.cipr";
-// Provides: fopen, fread, fwrite, fclose
-// (Coming soon)
+// std/file — File I/O
+// include "src/lib/std/file.cipr";
+
+extern fn cipr_fread_all(path: str): str;
+extern fn cipr_fwrite(path: str, content: str): int;
+extern fn cipr_fappend(path: str, content: str): int;
+extern fn cipr_file_exists(path: str): int;
+
+fn file_read(path: str): str {
+    return cipr_fread_all(path);
+}
+
+fn file_write(path: str, content: str): int {
+    return cipr_fwrite(path, content);
+}
+
+fn file_append(path: str, content: str): int {
+    return cipr_fappend(path, content);
+}
+
+fn file_exists(path: str): bool {
+    return cipr_file_exists(path) != 0;
+}
