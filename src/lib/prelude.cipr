@@ -1,11 +1,9 @@
 // Cipr Standard Prelude
-// Auto-injected into every program
-
-// Memory management
-extern fn cipr_malloc(size: int): @int;
-extern fn cipr_free(ptr: @int): void;
-
-// Primitive output helpers
-extern fn cipr_print_int(i: int): void;
-extern fn cipr_print_float(f: float): void;
-
+// Auto-injected into every compilation unit.
+// Intentionally minimal — only what every program unconditionally needs.
+// All other standard library features require an explicit include.
+//
+// Built-in functions (no declaration needed, handled by the compiler):
+//   print(x)  — works for int, float, bool, str
+//   new T(...)  — heap allocation
+//   delete ptr  — heap deallocation

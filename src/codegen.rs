@@ -149,9 +149,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         if let Some(then_id) = children[1] {
             self.execute(then_id)?;
         }
-        self.builder
-            .build_unconditional_branch(merge_bb)
-            .map_err(|e| e.to_string())?;
+        // Only branch to merge if this block doesn't already have a terminator (e.g. a return)
+        if self.builder.get_insert_block().and_then(|bb| bb.get_terminator()).is_none() {
+            self.builder.build_unconditional_branch(merge_bb).map_err(|e| e.to_string())?;
+        }
 
         // Else block
         self.builder.position_at_end(else_bb);
@@ -160,11 +161,12 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 self.execute(else_id)?;
             }
         }
-        self.builder
-            .build_unconditional_branch(merge_bb)
-            .map_err(|e| e.to_string())?;
+        // Same terminator check for else block
+        if self.builder.get_insert_block().and_then(|bb| bb.get_terminator()).is_none() {
+            self.builder.build_unconditional_branch(merge_bb).map_err(|e| e.to_string())?;
+        }
 
-        // Continue
+        // Continue after if/else
         self.builder.position_at_end(merge_bb);
         Ok(())
     }
@@ -201,12 +203,12 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         if let Some(body_id) = children[1] {
             self.execute(body_id)?;
         }
-        // Jump back to condition
-        self.builder
-            .build_unconditional_branch(cond_bb)
-            .map_err(|e| e.to_string())?;
+        // Only jump back to condition if the body didn't already terminate (e.g. return)
+        if self.builder.get_insert_block().and_then(|bb| bb.get_terminator()).is_none() {
+            self.builder.build_unconditional_branch(cond_bb).map_err(|e| e.to_string())?;
+        }
 
-        // Continue
+        // Continue after loop
         self.builder.position_at_end(after_bb);
         Ok(())
     }
@@ -815,7 +817,16 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let (struct_type, _) = self.struct_types.get(&struct_name).unwrap();
         
         let alloc_size_bytes = struct_type.size_of().unwrap();
-        let malloc_fn = self.module.get_function("cipr_malloc").unwrap();
+
+        // Auto-declare cipr_malloc if not yet in module (i8* cipr_malloc(i64))
+        let malloc_fn = match self.module.get_function("cipr_malloc") {
+            Some(f) => f,
+            None => {
+                let i8_ptr = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
+                let fn_type = i8_ptr.fn_type(&[self.context.i64_type().into()], false);
+                self.module.add_function("cipr_malloc", fn_type, Some(inkwell::module::Linkage::External))
+            }
+        };
         
         let call_site = self.builder.build_call(malloc_fn, &[alloc_size_bytes.into()], "malloc_call")
             .map_err(|e| e.to_string())?;
@@ -846,10 +857,17 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let child_id = self.arena[id].children[0].unwrap();
         let val_ptr = self.evaluate(child_id)?.into_pointer_value();
         
-        let i64_ptr_type = self.context.i64_type().ptr_type(inkwell::AddressSpace::from(0));
-        let raw_ptr = self.builder.build_pointer_cast(val_ptr, i64_ptr_type, "delete_ptr_cast").unwrap();
+        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
+        let raw_ptr = self.builder.build_pointer_cast(val_ptr, i8_ptr_type, "delete_ptr_cast").unwrap();
 
-        let free_fn = self.module.get_function("cipr_free").unwrap();
+        // Auto-declare cipr_free if not yet in module (void cipr_free(i8*))
+        let free_fn = match self.module.get_function("cipr_free") {
+            Some(f) => f,
+            None => {
+                let fn_type = self.context.void_type().fn_type(&[i8_ptr_type.into()], false);
+                self.module.add_function("cipr_free", fn_type, Some(inkwell::module::Linkage::External))
+            }
+        };
         self.builder.build_call(free_fn, &[raw_ptr.into()], "free_call")
             .map_err(|e| e.to_string())?;
             
