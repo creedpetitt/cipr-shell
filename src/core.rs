@@ -95,7 +95,7 @@ impl Core {
         module.print_to_file(&ir_path).map_err(|e: inkwell::support::LLVMString| e.to_string())?;
 
         // 2. Compile IR → object file via llc
-        println!("Compiling IR to object code...");
+        eprintln!("Compiling IR to object code...");
         let llc_ok = std::process::Command::new("llc-14")
             .args(["-O3", "-filetype=obj", "-relocation-model=pic", &ir_path, "-o", &obj_path])
             .status()
@@ -105,7 +105,7 @@ impl Core {
         }
 
         // 3. Link object file + all C runtime modules via gcc
-        println!("C Runtime Linked...");
+        eprintln!("C Runtime Linked...");
         let mut gcc_args = vec![obj_path.clone()];
         if let Ok(entries) = std::fs::read_dir("src/runtime") {
             for entry in entries.flatten() {
@@ -136,7 +136,7 @@ impl Core {
             let _ = std::fs::remove_file(&obj_path);
             let _ = std::fs::remove_file(out_bin);
         } else {
-            println!("Build finished: ./{}", out_bin);
+            eprintln!("Build finished: ./{}", out_bin);
         }
 
         Ok(())
