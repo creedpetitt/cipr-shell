@@ -1,0 +1,13 @@
+// Recursive Fibonacci — exercises function calls, recursion, if/else, and
+// arithmetic in a single program.
+fn fib(n: int): int {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+print(fib(0));
+print(fib(1));
+print(fib(5));
+print(fib(10));

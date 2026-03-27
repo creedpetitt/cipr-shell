@@ -1,0 +1,8 @@
+// Multi-include — verifies that including multiple stdlib files in one
+// translation unit compiles and runs correctly with no symbol conflicts.
+include "src/lib/std/string.cipr";
+include "src/lib/std/time.cipr";
+
+let greeting: str = str_concat("Hello", " World");
+print(greeting);
+print(str_len(greeting));
