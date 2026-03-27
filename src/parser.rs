@@ -861,38 +861,6 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        // $VAR -> env("VAR") desugaring
-        if self.match_types(&[TokenType::Dollar]) {
-            let var_name = self.consume(TokenType::Identifier, "Expect variable name after $.")?;
-            let line = var_name.line;
-
-            let arg_node = alloc_node(
-                self.arena,
-                NodeType::Literal,
-                var_name.clone(),
-                Value::Str(var_name.lexeme.clone()),
-                vec![],
-            );
-
-            let env_token = Token::synthetic(TokenType::Identifier, "env", line);
-            let func_node = alloc_node(
-                self.arena,
-                NodeType::VarExpr,
-                env_token,
-                Value::Null,
-                vec![],
-            );
-
-            let prev = self.previous().clone();
-            return Some(alloc_node(
-                self.arena,
-                NodeType::Call,
-                prev,
-                Value::Null,
-                vec![Some(func_node), Some(arg_node)],
-            ));
-        }
-
         if self.match_types(&[TokenType::Identifier]) {
             let prev = self.previous().clone();
             
