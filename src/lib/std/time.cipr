@@ -1,4 +1,8 @@
-// std/time - Time utilities
-// Usage: include "src/lib/std/time.cipr";
+// std/time — Time utilities
+// include "src/lib/std/time.cipr";
 
 extern fn cipr_time(): float;
+
+fn time(): float {
+    return cipr_time();
+}
