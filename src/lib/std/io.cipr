@@ -1,4 +1,8 @@
-// std/io - Console input/output
-// Usage: include "src/lib/std/io.cipr";
-// Provides: user input, console reading
-// (Coming soon)
+// std/io — Console I/O
+// include "src/lib/std/io.cipr";
+
+extern fn cipr_readline(): str;
+
+fn readline(): str {
+    return cipr_readline();
+}
