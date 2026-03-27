@@ -23,7 +23,10 @@ impl TypeEnv {
     }
 
     pub fn define(&mut self, name: &str, value_type: CiprType) {
-        self.scopes.last_mut().unwrap().insert(name.to_string(), value_type);
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), value_type);
     }
 
     pub fn get(&self, name: &str) -> Option<CiprType> {
@@ -47,8 +50,11 @@ pub struct TypeChecker<'a> {
 impl<'a> TypeChecker<'a> {
     pub fn new(arena: &'a mut NodeArena) -> Self {
         let mut env = TypeEnv::new();
-        env.define("print", CiprType::Callable(vec![CiprType::Unknown], Box::new(CiprType::Void)));
-        
+        env.define(
+            "print",
+            CiprType::Callable(vec![CiprType::Unknown], Box::new(CiprType::Void)),
+        );
+
         Self {
             arena,
             env,
@@ -244,7 +250,7 @@ impl<'a> TypeChecker<'a> {
                 param_types.push(p_type);
             }
         }
-        
+
         let func_type = CiprType::Callable(param_types, Box::new(ret_type));
         self.env.define(&name, func_type.clone());
         func_type
@@ -308,9 +314,11 @@ impl<'a> TypeChecker<'a> {
             val_type = self.check(val_id);
         }
 
-        if let Some(expected) = &self.current_return_type {
-            if val_type != *expected && expected != &CiprType::Void && val_type != CiprType::Unknown
-            {
+        if let Some(expected) = self.current_return_type.clone() {
+            if expected == CiprType::Void && children[0].is_some() {
+                self.error(line, "Void functions cannot return a value.");
+            }
+            if val_type != expected && expected != CiprType::Void && val_type != CiprType::Unknown {
                 self.error(
                     line,
                     &format!("Expected return type {:?} but got {:?}", expected, val_type),
@@ -572,8 +580,14 @@ impl<'a> TypeChecker<'a> {
         let target_type = self.check(target_id);
 
         let target_node_type = self.arena[target_id].node_type;
-        if target_node_type != NodeType::VarExpr && target_node_type != NodeType::Dereference && target_node_type != NodeType::IndexGet {
-            self.error(self.arena[id].token.line, "Can only take the address of a variable, dereference, or array index.");
+        if target_node_type != NodeType::VarExpr
+            && target_node_type != NodeType::Dereference
+            && target_node_type != NodeType::IndexGet
+        {
+            self.error(
+                self.arena[id].token.line,
+                "Can only take the address of a variable, dereference, or array index.",
+            );
             return CiprType::Unknown;
         }
 
@@ -589,7 +603,10 @@ impl<'a> TypeChecker<'a> {
             CiprType::Pointer(inner) => *inner,
             CiprType::Unknown => CiprType::Unknown,
             _ => {
-                self.error(self.arena[id].token.line, "Cannot dereference a non-pointer type.");
+                self.error(
+                    self.arena[id].token.line,
+                    "Cannot dereference a non-pointer type.",
+                );
                 CiprType::Unknown
             }
         }
@@ -607,12 +624,18 @@ impl<'a> TypeChecker<'a> {
             CiprType::Pointer(inner) => *inner,
             CiprType::Unknown => CiprType::Unknown,
             _ => {
-                self.error(self.arena[id].token.line, "Cannot assign to dereference of a non-pointer type.");
+                self.error(
+                    self.arena[id].token.line,
+                    "Cannot assign to dereference of a non-pointer type.",
+                );
                 CiprType::Unknown
             }
         };
 
-        if expected_type != CiprType::Unknown && val_type != CiprType::Unknown && expected_type != val_type {
+        if expected_type != CiprType::Unknown
+            && val_type != CiprType::Unknown
+            && expected_type != val_type
+        {
             self.error(
                 self.arena[id].token.line,
                 &format!(
@@ -646,19 +669,30 @@ impl<'a> TypeChecker<'a> {
 
     fn check_struct_init(&mut self, id: NodeId) -> CiprType {
         let struct_name = self.arena[id].token.lexeme.clone();
-        
+
         let struct_fields_opt = self.structs.get(&struct_name).cloned();
         let struct_fields = match struct_fields_opt {
             Some(f) => f,
             None => {
-                self.error(self.arena[id].token.line, &format!("Undefined struct '{}'", struct_name));
+                self.error(
+                    self.arena[id].token.line,
+                    &format!("Undefined struct '{}'", struct_name),
+                );
                 return CiprType::Unknown;
             }
         };
 
         let init_nodes = self.arena[id].children.clone();
         if init_nodes.len() != struct_fields.len() {
-            self.error(self.arena[id].token.line, &format!("Struct '{}' expects {} fields but got {}", struct_name, struct_fields.len(), init_nodes.len()));
+            self.error(
+                self.arena[id].token.line,
+                &format!(
+                    "Struct '{}' expects {} fields but got {}",
+                    struct_name,
+                    struct_fields.len(),
+                    init_nodes.len()
+                ),
+            );
             return CiprType::Unknown;
         }
 
@@ -666,17 +700,30 @@ impl<'a> TypeChecker<'a> {
             let child_id = child_opt.unwrap();
             let (field_name, val_id, line) = {
                 let assign_node = &self.arena[child_id];
-                (assign_node.token.lexeme.clone(), assign_node.children[0].unwrap(), assign_node.token.line)
+                (
+                    assign_node.token.lexeme.clone(),
+                    assign_node.children[0].unwrap(),
+                    assign_node.token.line,
+                )
             };
-            
+
             let (expected_name, expected_type) = &struct_fields[i];
             if &field_name != expected_name {
                 self.error(line, &format!("Provided struct field '{}' does not match expected field '{}' at position {}", field_name, expected_name, i));
             }
 
             let val_type = self.check(val_id);
-            if expected_type != &CiprType::Unknown && val_type != CiprType::Unknown && expected_type != &val_type {
-                self.error(line, &format!("Field '{}' expects type {:?}, got {:?}", field_name, expected_type, val_type));
+            if expected_type != &CiprType::Unknown
+                && val_type != CiprType::Unknown
+                && expected_type != &val_type
+            {
+                self.error(
+                    line,
+                    &format!(
+                        "Field '{}' expects type {:?}, got {:?}",
+                        field_name, expected_type, val_type
+                    ),
+                );
             }
         }
 
@@ -685,19 +732,30 @@ impl<'a> TypeChecker<'a> {
 
     fn check_new(&mut self, id: NodeId) -> CiprType {
         let struct_name = self.arena[id].token.lexeme.clone();
-        
+
         let struct_fields_opt = self.structs.get(&struct_name).cloned();
         let struct_fields = match struct_fields_opt {
             Some(f) => f,
             None => {
-                self.error(self.arena[id].token.line, &format!("Undefined struct '{}' for new", struct_name));
+                self.error(
+                    self.arena[id].token.line,
+                    &format!("Undefined struct '{}' for new", struct_name),
+                );
                 return CiprType::Unknown;
             }
         };
 
         let init_nodes = self.arena[id].children.clone();
         if init_nodes.len() != struct_fields.len() {
-            self.error(self.arena[id].token.line, &format!("'new {}' expects {} arguments but got {}", struct_name, struct_fields.len(), init_nodes.len()));
+            self.error(
+                self.arena[id].token.line,
+                &format!(
+                    "'new {}' expects {} arguments but got {}",
+                    struct_name,
+                    struct_fields.len(),
+                    init_nodes.len()
+                ),
+            );
             return CiprType::Unknown;
         }
 
@@ -705,9 +763,18 @@ impl<'a> TypeChecker<'a> {
             let child_id = child_opt.unwrap();
             let val_type = self.check(child_id);
             let (expected_name, expected_type) = &struct_fields[i];
-            
-            if expected_type != &CiprType::Unknown && val_type != CiprType::Unknown && expected_type != &val_type {
-                self.error(self.arena[id].token.line, &format!("'new {}' argument {} ({}) expects type {:?}, got {:?}", struct_name, i, expected_name, expected_type, val_type));
+
+            if expected_type != &CiprType::Unknown
+                && val_type != CiprType::Unknown
+                && expected_type != &val_type
+            {
+                self.error(
+                    self.arena[id].token.line,
+                    &format!(
+                        "'new {}' argument {} ({}) expects type {:?}, got {:?}",
+                        struct_name, i, expected_name, expected_type, val_type
+                    ),
+                );
             }
         }
 
@@ -721,7 +788,10 @@ impl<'a> TypeChecker<'a> {
         if let CiprType::Pointer(_) = child_type {
             CiprType::Void
         } else {
-            self.error(self.arena[id].token.line, &format!("Cannot delete non-pointer type {:?}", child_type));
+            self.error(
+                self.arena[id].token.line,
+                &format!("Cannot delete non-pointer type {:?}", child_type),
+            );
             CiprType::Unknown
         }
     }
@@ -729,7 +799,7 @@ impl<'a> TypeChecker<'a> {
     fn check_get_field(&mut self, id: NodeId) -> CiprType {
         let target_id = self.arena[id].children[0].unwrap();
         let mut target_type = self.check(target_id);
-        
+
         // Auto-deref support (p@.field vs p.field)
         if let CiprType::Pointer(inner) = &target_type {
             target_type = *inner.clone();
@@ -748,12 +818,18 @@ impl<'a> TypeChecker<'a> {
                         return ty.clone();
                     }
                 }
-                self.error(self.arena[id].token.line, &format!("Struct '{}' has no field '{}'", struct_name, field_name));
+                self.error(
+                    self.arena[id].token.line,
+                    &format!("Struct '{}' has no field '{}'", struct_name, field_name),
+                );
                 CiprType::Unknown
             }
             CiprType::Unknown => CiprType::Unknown,
             _ => {
-                self.error(self.arena[id].token.line, "Cannot access field on non-struct type");
+                self.error(
+                    self.arena[id].token.line,
+                    "Cannot access field on non-struct type",
+                );
                 CiprType::Unknown
             }
         }
@@ -762,16 +838,16 @@ impl<'a> TypeChecker<'a> {
     fn check_assign_field(&mut self, id: NodeId) -> CiprType {
         let target_id = self.arena[id].children[0].unwrap();
         let val_id = self.arena[id].children[1].unwrap();
-        
+
         let mut target_type = self.check(target_id);
         let val_type = self.check(val_id);
-        
+
         if let CiprType::Pointer(inner) = &target_type {
             target_type = *inner.clone();
         }
 
         let field_name = self.arena[id].token.lexeme.clone();
-        
+
         let expected_type = match target_type {
             CiprType::Struct(struct_name) => {
                 let fields = match self.structs.get(&struct_name) {
@@ -786,19 +862,34 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
                 if found_type == CiprType::Unknown {
-                    self.error(self.arena[id].token.line, &format!("Struct '{}' has no field '{}'", struct_name, field_name));
+                    self.error(
+                        self.arena[id].token.line,
+                        &format!("Struct '{}' has no field '{}'", struct_name, field_name),
+                    );
                 }
                 found_type
             }
             CiprType::Unknown => CiprType::Unknown,
             _ => {
-                self.error(self.arena[id].token.line, "Cannot assign field on non-struct type");
+                self.error(
+                    self.arena[id].token.line,
+                    "Cannot assign field on non-struct type",
+                );
                 CiprType::Unknown
             }
         };
 
-        if expected_type != CiprType::Unknown && val_type != CiprType::Unknown && expected_type != val_type {
-            self.error(self.arena[id].token.line, &format!("Field '{}' expects type {:?}, got {:?}", field_name, expected_type, val_type));
+        if expected_type != CiprType::Unknown
+            && val_type != CiprType::Unknown
+            && expected_type != val_type
+        {
+            self.error(
+                self.arena[id].token.line,
+                &format!(
+                    "Field '{}' expects type {:?}, got {:?}",
+                    field_name, expected_type, val_type
+                ),
+            );
         }
 
         expected_type

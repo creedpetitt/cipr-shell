@@ -14,7 +14,8 @@ pub struct Codegen<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
     pub arena: &'a NodeArena,
     pub symbol_table: SymbolTable<'ctx>,
-    pub struct_types: std::collections::HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
+    pub struct_types:
+        std::collections::HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
 }
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
@@ -52,7 +53,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
         // Always return 0 from main if we reach the end
         let zero = self.context.i32_type().const_int(0, false);
-        self.builder.build_return(Some(&zero)).map_err(|e| e.to_string())?;
+        self.builder
+            .build_return(Some(&zero))
+            .map_err(|e| e.to_string())?;
 
         Ok(())
     }
@@ -150,8 +153,15 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             self.execute(then_id)?;
         }
         // Only branch to merge if this block doesn't already have a terminator (e.g. a return)
-        if self.builder.get_insert_block().and_then(|bb| bb.get_terminator()).is_none() {
-            self.builder.build_unconditional_branch(merge_bb).map_err(|e| e.to_string())?;
+        if self
+            .builder
+            .get_insert_block()
+            .and_then(|bb| bb.get_terminator())
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(merge_bb)
+                .map_err(|e| e.to_string())?;
         }
 
         // Else block
@@ -162,8 +172,15 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             }
         }
         // Same terminator check for else block
-        if self.builder.get_insert_block().and_then(|bb| bb.get_terminator()).is_none() {
-            self.builder.build_unconditional_branch(merge_bb).map_err(|e| e.to_string())?;
+        if self
+            .builder
+            .get_insert_block()
+            .and_then(|bb| bb.get_terminator())
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(merge_bb)
+                .map_err(|e| e.to_string())?;
         }
 
         // Continue after if/else
@@ -204,8 +221,15 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             self.execute(body_id)?;
         }
         // Only jump back to condition if the body didn't already terminate (e.g. return)
-        if self.builder.get_insert_block().and_then(|bb| bb.get_terminator()).is_none() {
-            self.builder.build_unconditional_branch(cond_bb).map_err(|e| e.to_string())?;
+        if self
+            .builder
+            .get_insert_block()
+            .and_then(|bb| bb.get_terminator())
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(cond_bb)
+                .map_err(|e| e.to_string())?;
         }
 
         // Continue after loop
@@ -285,20 +309,37 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let (ext_name, fn_type, args) = match arg_type {
             CiprType::Str => {
                 let struct_type = self.get_llvm_type(&CiprType::Str)?;
-                let ftype = self.context.void_type().fn_type(&[struct_type.into()], false);
+                let ftype = self
+                    .context
+                    .void_type()
+                    .fn_type(&[struct_type.into()], false);
                 ("cipr_print_str", ftype, vec![arg_val.into()])
             }
             CiprType::Int => {
-                let ftype = self.context.void_type().fn_type(&[self.context.i64_type().into()], false);
+                let ftype = self
+                    .context
+                    .void_type()
+                    .fn_type(&[self.context.i64_type().into()], false);
                 ("cipr_print_int", ftype, vec![arg_val.into()])
             }
             CiprType::Float => {
-                let ftype = self.context.void_type().fn_type(&[self.context.f64_type().into()], false);
+                let ftype = self
+                    .context
+                    .void_type()
+                    .fn_type(&[self.context.f64_type().into()], false);
                 ("cipr_print_float", ftype, vec![arg_val.into()])
             }
             CiprType::Bool => {
-                let ftype = self.context.void_type().fn_type(&[self.context.bool_type().into()], false);
-                ("cipr_print_bool", ftype, vec![arg_val.into()])
+                let bool_val = arg_val.into_int_value();
+                let as_i64 = self
+                    .builder
+                    .build_int_z_extend(bool_val, self.context.i64_type(), "bool_to_i64")
+                    .map_err(|e| e.to_string())?;
+                let ftype = self
+                    .context
+                    .void_type()
+                    .fn_type(&[self.context.i64_type().into()], false);
+                ("cipr_print_bool", ftype, vec![as_i64.into()])
             }
             _ => return Err(format!("Unsupported type for print: {:?}", arg_type)),
         };
@@ -308,7 +349,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             None => self.module.add_function(ext_name, fn_type, None),
         };
 
-        self.builder.build_call(print_fn, &args, "").map_err(|e| e.to_string())?;
+        self.builder
+            .build_call(print_fn, &args, "")
+            .map_err(|e| e.to_string())?;
         Ok(self.context.i32_type().const_int(0, false).into())
     }
 
@@ -340,7 +383,8 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             }
         };
 
-        self.module.add_function(&name, fn_type, Some(inkwell::module::Linkage::External));
+        self.module
+            .add_function(&name, fn_type, Some(inkwell::module::Linkage::External));
         Ok(())
     }
 
@@ -354,25 +398,35 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             crate::ast::CiprType::Callable(_, ret) => *ret.clone(),
             _ => crate::ast::CiprType::Void,
         };
-        
-        let ret_type = self.get_llvm_type(&ret_type_enum)
-            .unwrap_or_else(|_| self.context.i32_type().into());
 
         // Determine parameter types
         let mut param_types = Vec::new();
         for i in 0..param_count {
             if let Some(param_id) = children[i] {
-                let p_type: BasicMetadataTypeEnum = self.get_llvm_type(&self.arena[param_id].resolved_type)?.into();
+                let p_type: BasicMetadataTypeEnum = self
+                    .get_llvm_type(&self.arena[param_id].resolved_type)?
+                    .into();
                 param_types.push(p_type);
             }
         }
 
-        let fn_type = match ret_type {
-            inkwell::types::BasicTypeEnum::IntType(t)     => t.fn_type(&param_types, false),
-            inkwell::types::BasicTypeEnum::FloatType(t)   => t.fn_type(&param_types, false),
-            inkwell::types::BasicTypeEnum::StructType(t)  => t.fn_type(&param_types, false),
-            inkwell::types::BasicTypeEnum::PointerType(t) => t.fn_type(&param_types, false),
-            _ => self.context.i32_type().fn_type(&param_types, false),
+        let fn_type = match ret_type_enum {
+            CiprType::Void => self.context.void_type().fn_type(&param_types, false),
+            _ => {
+                let ret_type = self.get_llvm_type(&ret_type_enum)?;
+                match ret_type {
+                    inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&param_types, false),
+                    inkwell::types::BasicTypeEnum::FloatType(t) => t.fn_type(&param_types, false),
+                    inkwell::types::BasicTypeEnum::StructType(t) => t.fn_type(&param_types, false),
+                    inkwell::types::BasicTypeEnum::PointerType(t) => t.fn_type(&param_types, false),
+                    _ => {
+                        return Err(format!(
+                            "Unsupported function return type: {:?}",
+                            ret_type_enum
+                        ))
+                    }
+                }
+            }
         };
         let function = self.module.add_function(&name, fn_type, None);
 
@@ -395,7 +449,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     .builder
                     .build_alloca(p_type, &p_name)
                     .map_err(|e| e.to_string())?;
-                self.builder.build_store(alloca, arg).map_err(|e| e.to_string())?;
+                self.builder
+                    .build_store(alloca, arg)
+                    .map_err(|e| e.to_string())?;
                 self.symbol_table.define(&p_name, alloca);
             }
         }
@@ -413,10 +469,14 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             .get_terminator()
             .is_none()
         {
-            let zero = self.context.i32_type().const_int(0, false);
-            self.builder
-                .build_return(Some(&zero))
-                .map_err(|e| e.to_string())?;
+            if matches!(ret_type_enum, CiprType::Void) {
+                self.builder.build_return(None).map_err(|e| e.to_string())?;
+            } else {
+                return Err(format!(
+                    "Function '{}' may exit without returning a value of type {:?}",
+                    name, ret_type_enum
+                ));
+            }
         }
 
         // Restore scope and insertion point
@@ -430,17 +490,27 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
     fn visit_return(&mut self, id: NodeId) -> Result<(), String> {
         let children = self.arena[id].children.clone();
-        if let Some(val_id) = children[0] {
+        let current_fn = self
+            .builder
+            .get_insert_block()
+            .ok_or("Not currently in a basic block")?
+            .get_parent()
+            .ok_or("Basic block has no parent function")?;
+
+        let fn_returns_value = current_fn.get_type().get_return_type().is_some();
+
+        if fn_returns_value {
+            let val_id = children[0]
+                .ok_or_else(|| "Missing return value for non-void function".to_string())?;
             let val = self.evaluate(val_id)?;
             self.builder
                 .build_return(Some(&val))
                 .map_err(|e| e.to_string())?;
         } else {
-            // Implicitly return 0 for void functions
-            let zero = self.context.i32_type().const_int(0, false);
-            self.builder
-                .build_return(Some(&zero))
-                .map_err(|e| e.to_string())?;
+            if children[0].is_some() {
+                return Err("Cannot return a value from a void function".to_string());
+            }
+            self.builder.build_return(None).map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -453,7 +523,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let llvm_type = self.get_llvm_type(resolved_type)?;
 
         // Allocate memory on the stack for this variable
-        let alloca = self.builder.build_alloca(llvm_type, &name).map_err(|e| e.to_string())?;
+        let alloca = self
+            .builder
+            .build_alloca(llvm_type, &name)
+            .map_err(|e| e.to_string())?;
 
         // Store it in the symbol table so we can find the pointer later
         self.symbol_table.define(&name, alloca);
@@ -462,7 +535,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let children = self.arena[id].children.clone();
         if let Some(init_id) = children[0] {
             let init_val = self.evaluate(init_id)?;
-            self.builder.build_store(alloca, init_val).map_err(|e| e.to_string())?;
+            self.builder
+                .build_store(alloca, init_val)
+                .map_err(|e| e.to_string())?;
         }
 
         Ok(())
@@ -483,7 +558,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             return Err("Assignment missing right-hand side".to_string());
         };
 
-        self.builder.build_store(ptr, val).map_err(|e| e.to_string())?;
+        self.builder
+            .build_store(ptr, val)
+            .map_err(|e| e.to_string())?;
         Ok(val)
     }
 
@@ -496,7 +573,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         };
 
         // Load the value out of the memory address (Inkwell 0.8 build_load takes ptr and name)
-        Ok(self.builder.build_load(ptr, &name).map_err(|e| e.to_string())?)
+        Ok(self
+            .builder
+            .build_load(ptr, &name)
+            .map_err(|e| e.to_string())?)
     }
 
     fn visit_literal(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
@@ -516,15 +596,31 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             }
             Value::Str(s) => {
                 let i64_type = self.context.i64_type();
-                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
-                let struct_type = self.context.struct_type(&[i64_type.into(), i8_ptr_type.into()], false);
-                
+                let i8_ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::from(0));
+                let struct_type = self
+                    .context
+                    .struct_type(&[i64_type.into(), i8_ptr_type.into()], false);
+
                 let len_val = i64_type.const_int(s.len() as u64, false);
-                let str_ptr = self.builder.build_global_string_ptr(s, "strlit").map_err(|e| e.to_string())?;
+                let str_ptr = self
+                    .builder
+                    .build_global_string_ptr(s, "strlit")
+                    .map_err(|e| e.to_string())?;
 
                 let mut struct_val = struct_type.get_undef();
-                struct_val = self.builder.build_insert_value(struct_val, len_val, 0, "insert_len").map_err(|e| e.to_string())?.into_struct_value();
-                struct_val = self.builder.build_insert_value(struct_val, str_ptr.as_pointer_value(), 1, "insert_ptr").map_err(|e| e.to_string())?.into_struct_value();
+                struct_val = self
+                    .builder
+                    .build_insert_value(struct_val, len_val, 0, "insert_len")
+                    .map_err(|e| e.to_string())?
+                    .into_struct_value();
+                struct_val = self
+                    .builder
+                    .build_insert_value(struct_val, str_ptr.as_pointer_value(), 1, "insert_ptr")
+                    .map_err(|e| e.to_string())?
+                    .into_struct_value();
 
                 Ok(struct_val.into())
             }
@@ -552,16 +648,56 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let left_int = left.into_int_value();
                 let right_int = right.into_int_value();
                 match op_type {
-                    TokenType::Plus => Ok(self.builder.build_int_add(left_int, right_int, "addtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Minus => Ok(self.builder.build_int_sub(left_int, right_int, "subtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Star => Ok(self.builder.build_int_mul(left_int, right_int, "multmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Slash => Ok(self.builder.build_int_signed_div(left_int, right_int, "divtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::EqualEqual => Ok(self.builder.build_int_compare(inkwell::IntPredicate::EQ, left_int, right_int, "eqtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::BangEqual => Ok(self.builder.build_int_compare(inkwell::IntPredicate::NE, left_int, right_int, "netmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Less => Ok(self.builder.build_int_compare(inkwell::IntPredicate::SLT, left_int, right_int, "lttmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::LessEqual => Ok(self.builder.build_int_compare(inkwell::IntPredicate::SLE, left_int, right_int, "letmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Greater => Ok(self.builder.build_int_compare(inkwell::IntPredicate::SGT, left_int, right_int, "gttmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::GreaterEqual => Ok(self.builder.build_int_compare(inkwell::IntPredicate::SGE, left_int, right_int, "getmp").map_err(|e| e.to_string())?.into()),
+                    TokenType::Plus => Ok(self
+                        .builder
+                        .build_int_add(left_int, right_int, "addtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Minus => Ok(self
+                        .builder
+                        .build_int_sub(left_int, right_int, "subtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Star => Ok(self
+                        .builder
+                        .build_int_mul(left_int, right_int, "multmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Slash => Ok(self
+                        .builder
+                        .build_int_signed_div(left_int, right_int, "divtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::EqualEqual => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::EQ, left_int, right_int, "eqtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::BangEqual => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::NE, left_int, right_int, "netmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Less => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::SLT, left_int, right_int, "lttmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::LessEqual => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::SLE, left_int, right_int, "letmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Greater => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::SGT, left_int, right_int, "gttmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::GreaterEqual => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::SGE, left_int, right_int, "getmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
                     _ => Err(format!("Unsupported Int binary op: {:?}", op_type)),
                 }
             }
@@ -569,16 +705,86 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let left_float = left.into_float_value();
                 let right_float = right.into_float_value();
                 match op_type {
-                    TokenType::Plus => Ok(self.builder.build_float_add(left_float, right_float, "faddtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Minus => Ok(self.builder.build_float_sub(left_float, right_float, "fsubtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Star => Ok(self.builder.build_float_mul(left_float, right_float, "fmultmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Slash => Ok(self.builder.build_float_div(left_float, right_float, "fdivtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::EqualEqual => Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OEQ, left_float, right_float, "eqtmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::BangEqual => Ok(self.builder.build_float_compare(inkwell::FloatPredicate::ONE, left_float, right_float, "netmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Less => Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OLT, left_float, right_float, "lttmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::LessEqual => Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OLE, left_float, right_float, "letmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::Greater => Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OGT, left_float, right_float, "gttmp").map_err(|e| e.to_string())?.into()),
-                    TokenType::GreaterEqual => Ok(self.builder.build_float_compare(inkwell::FloatPredicate::OGE, left_float, right_float, "getmp").map_err(|e| e.to_string())?.into()),
+                    TokenType::Plus => Ok(self
+                        .builder
+                        .build_float_add(left_float, right_float, "faddtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Minus => Ok(self
+                        .builder
+                        .build_float_sub(left_float, right_float, "fsubtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Star => Ok(self
+                        .builder
+                        .build_float_mul(left_float, right_float, "fmultmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Slash => Ok(self
+                        .builder
+                        .build_float_div(left_float, right_float, "fdivtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::EqualEqual => Ok(self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::OEQ,
+                            left_float,
+                            right_float,
+                            "eqtmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::BangEqual => Ok(self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::ONE,
+                            left_float,
+                            right_float,
+                            "netmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Less => Ok(self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::OLT,
+                            left_float,
+                            right_float,
+                            "lttmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::LessEqual => Ok(self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::OLE,
+                            left_float,
+                            right_float,
+                            "letmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::Greater => Ok(self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::OGT,
+                            left_float,
+                            right_float,
+                            "gttmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::GreaterEqual => Ok(self
+                        .builder
+                        .build_float_compare(
+                            inkwell::FloatPredicate::OGE,
+                            left_float,
+                            right_float,
+                            "getmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
                     _ => Err(format!("Unsupported Float binary op: {:?}", op_type)),
                 }
             }
@@ -621,22 +827,35 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let operand_type = &self.arena[right_id].resolved_type;
 
         match op_type {
-            TokenType::Minus => {
-                match operand_type {
-                    CiprType::Int => {
-                        let right_int = right.into_int_value();
-                        Ok(self.builder.build_int_neg(right_int, "negtmp").map_err(|e| e.to_string())?.into())
-                    }
-                    CiprType::Float => {
-                        let right_float = right.into_float_value();
-                        Ok(self.builder.build_float_neg(right_float, "fnegtmp").map_err(|e| e.to_string())?.into())
-                    }
-                    _ => Err(format!("Unsupported Unary Minus operand type: {:?}", operand_type)),
+            TokenType::Minus => match operand_type {
+                CiprType::Int => {
+                    let right_int = right.into_int_value();
+                    Ok(self
+                        .builder
+                        .build_int_neg(right_int, "negtmp")
+                        .map_err(|e| e.to_string())?
+                        .into())
                 }
-            }
+                CiprType::Float => {
+                    let right_float = right.into_float_value();
+                    Ok(self
+                        .builder
+                        .build_float_neg(right_float, "fnegtmp")
+                        .map_err(|e| e.to_string())?
+                        .into())
+                }
+                _ => Err(format!(
+                    "Unsupported Unary Minus operand type: {:?}",
+                    operand_type
+                )),
+            },
             TokenType::Bang => {
                 let right_int = right.into_int_value();
-                Ok(self.builder.build_not(right_int, "nottmp").map_err(|e| e.to_string())?.into())
+                Ok(self
+                    .builder
+                    .build_not(right_int, "nottmp")
+                    .map_err(|e| e.to_string())?
+                    .into())
             }
             _ => Err(format!("Unsupported Unary op: {:?}", op_type)),
         }
@@ -657,19 +876,28 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let merge_bb = self.context.append_basic_block(parent_fn, "logical.merge");
 
         if op_type == TokenType::And {
-            self.builder.build_conditional_branch(left_val, right_bb, merge_bb).map_err(|e| e.to_string())?;
+            self.builder
+                .build_conditional_branch(left_val, right_bb, merge_bb)
+                .map_err(|e| e.to_string())?;
         } else {
-            self.builder.build_conditional_branch(left_val, merge_bb, right_bb).map_err(|e| e.to_string())?;
+            self.builder
+                .build_conditional_branch(left_val, merge_bb, right_bb)
+                .map_err(|e| e.to_string())?;
         }
 
         self.builder.position_at_end(right_bb);
         let right_val = self.evaluate(right_id)?.into_int_value();
         let incoming_right_bb = self.builder.get_insert_block().ok_or("No insert block")?;
-        self.builder.build_unconditional_branch(merge_bb).map_err(|e| e.to_string())?;
+        self.builder
+            .build_unconditional_branch(merge_bb)
+            .map_err(|e| e.to_string())?;
 
         self.builder.position_at_end(merge_bb);
-        let phi = self.builder.build_phi(self.context.bool_type(), "logical.tmp").map_err(|e| e.to_string())?;
-        
+        let phi = self
+            .builder
+            .build_phi(self.context.bool_type(), "logical.tmp")
+            .map_err(|e| e.to_string())?;
+
         let short_circuit_val = if op_type == TokenType::And {
             self.context.bool_type().const_int(0, false)
         } else {
@@ -678,21 +906,29 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
         phi.add_incoming(&[
             (&short_circuit_val, left_bb),
-            (&right_val, incoming_right_bb)
+            (&right_val, incoming_right_bb),
         ]);
 
         Ok(phi.as_basic_value())
     }
 
-    fn get_llvm_type(&self, resolved_type: &CiprType) -> Result<inkwell::types::BasicTypeEnum<'ctx>, String> {
+    fn get_llvm_type(
+        &self,
+        resolved_type: &CiprType,
+    ) -> Result<inkwell::types::BasicTypeEnum<'ctx>, String> {
         match resolved_type {
             CiprType::Int => Ok(self.context.i64_type().into()),
             CiprType::Float => Ok(self.context.f64_type().into()),
             CiprType::Bool => Ok(self.context.bool_type().into()),
             CiprType::Str => {
                 let i64_type = self.context.i64_type();
-                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
-                let struct_type = self.context.struct_type(&[i64_type.into(), i8_ptr_type.into()], false);
+                let i8_ptr_type = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::from(0));
+                let struct_type = self
+                    .context
+                    .struct_type(&[i64_type.into(), i8_ptr_type.into()], false);
                 Ok(struct_type.into())
             }
             CiprType::Array(elem) => {
@@ -704,34 +940,48 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 Ok(inner_llvm.ptr_type(inkwell::AddressSpace::from(0)).into())
             }
             CiprType::Struct(name) => {
-                let (struct_type, _) = self.struct_types.get(name).ok_or_else(|| format!("Unknown struct '{}'", name))?;
+                let (struct_type, _) = self
+                    .struct_types
+                    .get(name)
+                    .ok_or_else(|| format!("Unknown struct '{}'", name))?;
                 Ok((*struct_type).into())
             }
-            CiprType::Void | CiprType::Unknown => Ok(self.context.i32_type().into()), // Dummy type for void
-            _ => Err(format!("Unsupported LLVM type mapping for: {:?}", resolved_type)),
+            CiprType::Void => Err("Void is not a first-class value type".to_string()),
+            CiprType::Unknown => Err("Type was not resolved before code generation".to_string()),
+            _ => Err(format!(
+                "Unsupported LLVM type mapping for: {:?}",
+                resolved_type
+            )),
         }
     }
 
     fn visit_array(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
         let children = self.arena[id].children.clone();
         let len = children.len();
-        
+
         let elem_type = match &self.arena[id].resolved_type {
             CiprType::Array(t) => self.get_llvm_type(t)?,
             _ => return Err("Expected Array type for array literal".to_string()),
         };
 
         let size_val = self.context.i32_type().const_int(len as u64, false);
-        let ptr = self.builder.build_array_alloca(elem_type, size_val, "array_alloc").map_err(|e| e.to_string())?;
+        let ptr = self
+            .builder
+            .build_array_alloca(elem_type, size_val, "array_alloc")
+            .map_err(|e| e.to_string())?;
 
         for (i, child_opt) in children.iter().enumerate() {
             if let Some(child_id) = child_opt {
                 let val = self.evaluate(*child_id)?;
                 let idx_val = self.context.i64_type().const_int(i as u64, false);
                 let elem_ptr = unsafe {
-                    self.builder.build_in_bounds_gep(ptr, &[idx_val], "elem_ptr").map_err(|e| e.to_string())?
+                    self.builder
+                        .build_in_bounds_gep(ptr, &[idx_val], "elem_ptr")
+                        .map_err(|e| e.to_string())?
                 };
-                self.builder.build_store(elem_ptr, val).map_err(|e| e.to_string())?;
+                self.builder
+                    .build_store(elem_ptr, val)
+                    .map_err(|e| e.to_string())?;
             }
         }
 
@@ -747,13 +997,21 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let index_val = self.evaluate(index_id)?.into_int_value();
 
         let elem_ptr = unsafe {
-            self.builder.build_in_bounds_gep(target_ptr, &[index_val], "idx_ptr").map_err(|e| e.to_string())?
+            self.builder
+                .build_in_bounds_gep(target_ptr, &[index_val], "idx_ptr")
+                .map_err(|e| e.to_string())?
         };
-        
-        Ok(self.builder.build_load(elem_ptr, "idx_load").map_err(|e| e.to_string())?)
+
+        Ok(self
+            .builder
+            .build_load(elem_ptr, "idx_load")
+            .map_err(|e| e.to_string())?)
     }
 
-    fn get_eval_pointer(&mut self, id: NodeId) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+    fn get_eval_pointer(
+        &mut self,
+        id: NodeId,
+    ) -> Result<inkwell::values::PointerValue<'ctx>, String> {
         let node_type = self.arena[id].node_type;
         match node_type {
             NodeType::VarExpr => {
@@ -780,11 +1038,11 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                             CiprType::Struct(n) => n,
                             _ => return Err("Dereferencing non-struct".to_string()),
                         }
-                    },
+                    }
                     _ => return Err("Invalid target for GetField pointer".to_string()),
                 };
                 let field_idx = self.get_struct_field_index(&struct_name, &field_name)?;
-                
+
                 let target_ptr = if is_ptr {
                     self.evaluate(target_id)?.into_pointer_value()
                 } else {
@@ -792,7 +1050,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 };
 
                 let (_, _) = self.struct_types.get(&struct_name).unwrap();
-                let field_ptr = self.builder.build_struct_gep(target_ptr, field_idx, "nested_gep").map_err(|e| e.to_string())?;
+                let field_ptr = self
+                    .builder
+                    .build_struct_gep(target_ptr, field_idx, "nested_gep")
+                    .map_err(|e| e.to_string())?;
                 Ok(field_ptr)
             }
             NodeType::IndexGet => {
@@ -801,7 +1062,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let arr_ptr = self.evaluate(arr_id)?.into_pointer_value();
                 let idx_val = self.evaluate(index_id)?.into_int_value();
                 unsafe {
-                    Ok(self.builder.build_in_bounds_gep(arr_ptr, &[idx_val], "idx_gep").map_err(|e| e.to_string())?)
+                    Ok(self
+                        .builder
+                        .build_in_bounds_gep(arr_ptr, &[idx_val], "idx_gep")
+                        .map_err(|e| e.to_string())?)
                 }
             }
             _ => Err("Cannot take pointer to ephemeral expression".to_string()),
@@ -814,13 +1078,19 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<u32, String> {
-        let (_, fields) = self.struct_types.get(struct_name).ok_or_else(|| format!("Unknown struct {}", struct_name))?;
+        let (_, fields) = self
+            .struct_types
+            .get(struct_name)
+            .ok_or_else(|| format!("Unknown struct {}", struct_name))?;
         for (i, f) in fields.iter().enumerate() {
             if f == field_name {
                 return Ok(i as u32);
             }
         }
-        Err(format!("Field '{}' not found in struct '{}'", field_name, struct_name))
+        Err(format!(
+            "Field '{}' not found in struct '{}'",
+            field_name, struct_name
+        ))
     }
 
     fn visit_struct_init(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
@@ -832,13 +1102,17 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
         let (struct_type, _) = self.struct_types.get(&struct_name).unwrap();
         let mut struct_val = struct_type.const_zero();
-        
+
         for (i, child_opt) in self.arena[id].children.iter().enumerate() {
             let child_id = child_opt.unwrap();
             let assign_node = &self.arena[child_id];
             let val_id = assign_node.children[0].unwrap();
             let val = self.evaluate(val_id)?;
-            struct_val = self.builder.build_insert_value(struct_val, val, i as u32, "struct_init").map_err(|e| e.to_string())?.into_struct_value();
+            struct_val = self
+                .builder
+                .build_insert_value(struct_val, val, i as u32, "struct_init")
+                .map_err(|e| e.to_string())?
+                .into_struct_value();
         }
 
         Ok(struct_val.into())
@@ -847,38 +1121,54 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     fn visit_new(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
         let struct_name = self.arena[id].token.lexeme.clone();
         let (struct_type, _) = self.struct_types.get(&struct_name).unwrap();
-        
+
         let alloc_size_bytes = struct_type.size_of().unwrap();
 
         // Auto-declare cipr_malloc if not yet in module (i8* cipr_malloc(i64))
         let malloc_fn = match self.module.get_function("cipr_malloc") {
             Some(f) => f,
             None => {
-                let i8_ptr = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
+                let i8_ptr = self
+                    .context
+                    .i8_type()
+                    .ptr_type(inkwell::AddressSpace::from(0));
                 let fn_type = i8_ptr.fn_type(&[self.context.i64_type().into()], false);
-                self.module.add_function("cipr_malloc", fn_type, Some(inkwell::module::Linkage::External))
+                self.module.add_function(
+                    "cipr_malloc",
+                    fn_type,
+                    Some(inkwell::module::Linkage::External),
+                )
             }
         };
-        
-        let call_site = self.builder.build_call(malloc_fn, &[alloc_size_bytes.into()], "malloc_call")
+
+        let call_site = self
+            .builder
+            .build_call(malloc_fn, &[alloc_size_bytes.into()], "malloc_call")
             .map_err(|e| e.to_string())?;
-            
+
         let raw_ptr = match call_site.try_as_basic_value() {
             inkwell::values::ValueKind::Basic(v) => v.into_pointer_value(),
             _ => return Err("cipr_malloc did not return a pointer".to_string()),
         };
-        
+
         // Cast raw i8* pointer to Struct pointer type
         let struct_ptr_type = struct_type.ptr_type(inkwell::AddressSpace::from(0));
-        let struct_ptr = self.builder.build_pointer_cast(raw_ptr, struct_ptr_type, "new_ptr_cast").unwrap();
+        let struct_ptr = self
+            .builder
+            .build_pointer_cast(raw_ptr, struct_ptr_type, "new_ptr_cast")
+            .unwrap();
 
         // Initialize fields with args
         for (i, child_opt) in self.arena[id].children.iter().enumerate() {
             if let Some(arg_id) = child_opt {
                 let val = self.evaluate(*arg_id)?;
-                let field_ptr = self.builder.build_struct_gep(struct_ptr, i as u32, "new_gep")
+                let field_ptr = self
+                    .builder
+                    .build_struct_gep(struct_ptr, i as u32, "new_gep")
                     .map_err(|e| e.to_string())?;
-                self.builder.build_store(field_ptr, val).map_err(|e| e.to_string())?;
+                self.builder
+                    .build_store(field_ptr, val)
+                    .map_err(|e| e.to_string())?;
             }
         }
 
@@ -888,21 +1178,35 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     fn visit_delete(&mut self, id: NodeId) -> Result<(), String> {
         let child_id = self.arena[id].children[0].unwrap();
         let val_ptr = self.evaluate(child_id)?.into_pointer_value();
-        
-        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
-        let raw_ptr = self.builder.build_pointer_cast(val_ptr, i8_ptr_type, "delete_ptr_cast").unwrap();
+
+        let i8_ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::from(0));
+        let raw_ptr = self
+            .builder
+            .build_pointer_cast(val_ptr, i8_ptr_type, "delete_ptr_cast")
+            .unwrap();
 
         // Auto-declare cipr_free if not yet in module (void cipr_free(i8*))
         let free_fn = match self.module.get_function("cipr_free") {
             Some(f) => f,
             None => {
-                let fn_type = self.context.void_type().fn_type(&[i8_ptr_type.into()], false);
-                self.module.add_function("cipr_free", fn_type, Some(inkwell::module::Linkage::External))
+                let fn_type = self
+                    .context
+                    .void_type()
+                    .fn_type(&[i8_ptr_type.into()], false);
+                self.module.add_function(
+                    "cipr_free",
+                    fn_type,
+                    Some(inkwell::module::Linkage::External),
+                )
             }
         };
-        self.builder.build_call(free_fn, &[raw_ptr.into()], "free_call")
+        self.builder
+            .build_call(free_fn, &[raw_ptr.into()], "free_call")
             .map_err(|e| e.to_string())?;
-            
+
         Ok(())
     }
 
@@ -910,7 +1214,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let target_id = self.arena[id].children[0].unwrap();
         let target_type = self.arena[target_id].resolved_type.clone();
         let field_name = self.arena[id].token.lexeme.clone();
-        
+
         let mut is_ptr = false;
         let struct_name = match target_type {
             CiprType::Struct(name) => name,
@@ -929,21 +1233,30 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         if is_ptr {
             let ptr_val = self.evaluate(target_id)?.into_pointer_value();
             let (_, _) = self.struct_types.get(&struct_name).unwrap();
-            let field_ptr = self.builder.build_struct_gep(ptr_val, field_idx, "field_gep").map_err(|e| e.to_string())?;
-            Ok(self.builder.build_load(field_ptr, "field_load").map_err(|e| e.to_string())?)
+            let field_ptr = self
+                .builder
+                .build_struct_gep(ptr_val, field_idx, "field_gep")
+                .map_err(|e| e.to_string())?;
+            Ok(self
+                .builder
+                .build_load(field_ptr, "field_load")
+                .map_err(|e| e.to_string())?)
         } else {
             let struct_val = self.evaluate(target_id)?.into_struct_value();
-            Ok(self.builder.build_extract_value(struct_val, field_idx, "field_extract").map_err(|e| e.to_string())?)
+            Ok(self
+                .builder
+                .build_extract_value(struct_val, field_idx, "field_extract")
+                .map_err(|e| e.to_string())?)
         }
     }
 
     fn visit_assign_field(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
         let target_expr_id = self.arena[id].children[0].unwrap();
         let val_expr_id = self.arena[id].children[1].unwrap();
-        
+
         let target_type = self.arena[target_expr_id].resolved_type.clone();
         let field_name = self.arena[id].token.lexeme.clone();
-        
+
         let mut is_ptr = false;
         let struct_name = match target_type {
             CiprType::Struct(name) => name,
@@ -958,7 +1271,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         };
 
         let field_idx = self.get_struct_field_index(&struct_name, &field_name)?;
-        
+
         let struct_ptr = if is_ptr {
             self.evaluate(target_expr_id)?.into_pointer_value()
         } else {
@@ -966,11 +1279,16 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         };
 
         let (_, _) = self.struct_types.get(&struct_name).unwrap();
-        let field_ptr = self.builder.build_struct_gep(struct_ptr, field_idx, "assign_field_gep").map_err(|e| e.to_string())?;
-        
+        let field_ptr = self
+            .builder
+            .build_struct_gep(struct_ptr, field_idx, "assign_field_gep")
+            .map_err(|e| e.to_string())?;
+
         let val = self.evaluate(val_expr_id)?;
-        self.builder.build_store(field_ptr, val).map_err(|e| e.to_string())?;
-        
+        self.builder
+            .build_store(field_ptr, val)
+            .map_err(|e| e.to_string())?;
+
         Ok(val)
     }
 
@@ -978,7 +1296,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let children = self.arena[id].children.clone();
         let target_id = children[0].expect("Dereference missing target");
         let ptr_val = self.evaluate(target_id)?.into_pointer_value();
-        Ok(self.builder.build_load(ptr_val, "deref_load").map_err(|e| e.to_string())?)
+        Ok(self
+            .builder
+            .build_load(ptr_val, "deref_load")
+            .map_err(|e| e.to_string())?)
     }
 
     fn visit_assign_deref(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
@@ -989,7 +1310,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let ptr_val = self.evaluate(ptr_expr_id)?.into_pointer_value();
         let val = self.evaluate(val_expr_id)?;
 
-        self.builder.build_store(ptr_val, val).map_err(|e| e.to_string())?;
+        self.builder
+            .build_store(ptr_val, val)
+            .map_err(|e| e.to_string())?;
         Ok(val)
     }
 }
