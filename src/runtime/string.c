@@ -16,7 +16,7 @@ cipr_str_t cipr_str_concat(cipr_str_t a, cipr_str_t b) {
     return (cipr_str_t){ .len = total, .data = buf };
 }
 
-int cipr_str_eq(cipr_str_t a, cipr_str_t b) {
+int64_t cipr_str_eq(cipr_str_t a, cipr_str_t b) {
     return a.len == b.len && memcmp(a.data, b.data, (size_t)a.len) == 0;
 }
 
@@ -55,7 +55,7 @@ cipr_str_t cipr_float_to_str(double n) {
     return (cipr_str_t){ .len = len, .data = data };
 }
 
-int cipr_str_contains(cipr_str_t s, cipr_str_t sub) {
+int64_t cipr_str_contains(cipr_str_t s, cipr_str_t sub) {
     if (sub.len == 0) return 1;
     if (sub.len > s.len) return 0;
     for (int64_t i = 0; i <= s.len - sub.len; i++) {
@@ -64,7 +64,7 @@ int cipr_str_contains(cipr_str_t s, cipr_str_t sub) {
     return 0;
 }
 
-int cipr_str_starts_with(cipr_str_t s, cipr_str_t prefix) {
+int64_t cipr_str_starts_with(cipr_str_t s, cipr_str_t prefix) {
     if (prefix.len > s.len) return 0;
     return memcmp(s.data, prefix.data, (size_t)prefix.len) == 0;
 }

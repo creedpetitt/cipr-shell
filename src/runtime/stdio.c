@@ -13,6 +13,6 @@ void cipr_print_float(double val) {
     printf("%f\n", val);
 }
 
-void cipr_print_bool(int val) {
+void cipr_print_bool(int64_t val) {
     printf("%s\n", val ? "true" : "false");
 }
