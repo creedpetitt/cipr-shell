@@ -1,5 +1,4 @@
 use std::fs;
-use std::io::{self, Write};
 use std::path::Path;
 
 use crate::ast::NodeArena;
@@ -31,49 +30,15 @@ impl Core {
         let out_path = parent.join(file_stem);
 
         if ext == "cipr" {
-            self.run(&source, build_mode, out_path.to_str().unwrap_or("out"))
+            // The prelude is auto-injected 
+            let prelude_inject = "include \"src/lib/prelude.cipr\";\n";
+            let full_source = format!("{}{}", prelude_inject, source);
+            self.run(&full_source, build_mode, out_path.to_str().unwrap_or("out"))
         } else {
             Err("Unsupported file extension. Expected .cipr".to_string())
         }
     }
 
-    pub fn run_prompt(&mut self) {
-        let mut buffer = String::new();
-        let mut brace_count: i32 = 0;
-
-        loop {
-            if buffer.is_empty() {
-                print!("> ");
-            } else {
-                print!("... ");
-            }
-            io::stdout().flush().unwrap();
-
-            let mut line = String::new();
-            if io::stdin().read_line(&mut line).unwrap() == 0 {
-                break;
-            }
-
-            for c in line.chars() {
-                if c == '{' {
-                    brace_count += 1;
-                }
-                if c == '}' {
-                    brace_count -= 1;
-                }
-            }
-
-            buffer.push_str(&line);
-
-            if brace_count <= 0 && !buffer.trim().is_empty() {
-                if let Err(e) = self.run(&buffer, false, "repl_out") {
-                    eprintln!("{}", e);
-                }
-                buffer.clear();
-                brace_count = 0;
-            }
-        }
-    }
 
     pub fn run(&mut self, source: &str, build_mode: bool, out_bin: &str) -> Result<(), String> {
         let (tokens, scan_error) = Scanner::new(source).scan_tokens();
@@ -96,82 +61,84 @@ impl Core {
             if type_checker.had_error {
                 return Err("Type Error occurred.".to_string());
             }
-                let context = inkwell::context::Context::create();
-                let module = context.create_module("main");
-                let builder = context.create_builder();
+            let context = inkwell::context::Context::create();
+            let module = context.create_module("main");
+            let builder = context.create_builder();
 
-                let mut codegen = Codegen::new(&context, &builder, &module, &self.arena);
-                if let Err(e) = codegen.compile(root_id) {
-                    return Err(format!("Codegen Error: {}", e));
-                }
+            let mut codegen = Codegen::new(&context, &builder, &module, &self.arena);
+            if let Err(e) = codegen.compile(root_id) {
+                return Err(format!("Codegen Error: {}", e));
+            }
 
-                // Verify module
-                if let Err(e) = module.verify() {
-                    let err_str: inkwell::support::LLVMString = e;
-                    return Err(format!("LLVM Verification Error: {}", err_str.to_string()));
-                }
+            if let Err(e) = module.verify() {
+                let err_str: inkwell::support::LLVMString = e;
+                return Err(format!("LLVM Verification Error: {}", err_str.to_string()));
+            }
 
-                // Write LLVM IR to a file
-                let ir_path = format!("{}.ll", out_bin);
-                module.print_to_file(&ir_path).map_err(|e: inkwell::support::LLVMString| e.to_string())?;
-
-                // Invoke llc-14 to compile IR to object file
-                let obj_path = format!("{}.o", out_bin);
-                println!("Compiling IR to object code...");
-                let status_llc = std::process::Command::new("llc-14")
-                    .args(["-O3", "-filetype=obj", "-relocation-model=pic", &ir_path, "-o", &obj_path])
-                    .status()
-                    .map_err(|e| format!("Failed to invoke llc-14: {}", e))?;
-
-                if !status_llc.success() {
-                    return Err("llc-14 compilation failed!".to_string());
-                }
-
-                // Invoke gcc to link object file with all C runtime modules
-                println!("C Runtime Linked...");
-                
-                let mut gcc_args = vec![obj_path.clone()];
-                if let Ok(entries) = std::fs::read_dir("src/runtime") {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.extension().and_then(|s| s.to_str()) == Some("c") {
-                            gcc_args.push(path.to_string_lossy().to_string());
-                        }
-                    }
-                }
-                gcc_args.push("-o".to_string());
-                gcc_args.push(out_bin.to_string());
-
-                let status_gcc = std::process::Command::new("gcc")
-                    .args(&gcc_args)
-                    .status()
-                    .map_err(|e| format!("Failed to invoke gcc: {}", e))?;
-
-                if !status_gcc.success() {
-                    return Err("gcc linking failed!".to_string());
-                }
-
-                if !build_mode {
-                    // Execute the built binary directly
-                    let status_run = std::process::Command::new(format!("./{}", out_bin))
-                        .status()
-                        .map_err(|e| format!("Failed to run executable: {}", e))?;
-                    
-                    if !status_run.success() {
-                        return Err("Program execution failed.".to_string());
-                    }
-
-                    // Clean up intermediate files and binary
-                    let _ = std::fs::remove_file(ir_path);
-                    let _ = std::fs::remove_file(obj_path);
-                    let _ = std::fs::remove_file(out_bin);
-                } else {
-                    println!("Build finished: ./{}", out_bin);
-                }
-
-                Ok(())
+            Self::link_and_emit(&module, out_bin, build_mode)?;
+            Ok(())
         } else {
             Ok(())
         }
+    }
+
+    /// Writes LLVM IR to disk, compiles with llc, links with gcc + C runtime,
+    /// and optionally executes the resulting binary.
+    fn link_and_emit(
+        module: &inkwell::module::Module,
+        out_bin: &str,
+        build_mode: bool,
+    ) -> Result<(), String> {
+        // 1. Write LLVM IR
+        let ir_path = format!("{}.ll", out_bin);
+        let obj_path = format!("{}.o", out_bin);
+        module.print_to_file(&ir_path).map_err(|e: inkwell::support::LLVMString| e.to_string())?;
+
+        // 2. Compile IR → object file via llc
+        println!("Compiling IR to object code...");
+        let llc_ok = std::process::Command::new("llc-14")
+            .args(["-O3", "-filetype=obj", "-relocation-model=pic", &ir_path, "-o", &obj_path])
+            .status()
+            .map_err(|e| format!("Failed to invoke llc-14: {}", e))?;
+        if !llc_ok.success() {
+            return Err("llc-14 compilation failed!".to_string());
+        }
+
+        // 3. Link object file + all C runtime modules via gcc
+        println!("C Runtime Linked...");
+        let mut gcc_args = vec![obj_path.clone()];
+        if let Ok(entries) = std::fs::read_dir("src/runtime") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("c") {
+                    gcc_args.push(path.to_string_lossy().into_owned());
+                }
+            }
+        }
+        gcc_args.extend(["-o".to_string(), out_bin.to_string()]);
+        let gcc_ok = std::process::Command::new("gcc")
+            .args(&gcc_args)
+            .status()
+            .map_err(|e| format!("Failed to invoke gcc: {}", e))?;
+        if !gcc_ok.success() {
+            return Err("gcc linking failed!".to_string());
+        }
+
+        // 4. Run binary (unless --build mode), then clean up intermediates
+        if !build_mode {
+            let run_ok = std::process::Command::new(format!("./{}", out_bin))
+                .status()
+                .map_err(|e| format!("Failed to run executable: {}", e))?;
+            if !run_ok.success() {
+                return Err("Program execution failed.".to_string());
+            }
+            let _ = std::fs::remove_file(&ir_path);
+            let _ = std::fs::remove_file(&obj_path);
+            let _ = std::fs::remove_file(out_bin);
+        } else {
+            println!("Build finished: ./{}", out_bin);
+        }
+
+        Ok(())
     }
 }

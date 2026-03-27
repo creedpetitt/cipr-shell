@@ -1,0 +1,11 @@
+// Cipr Standard Prelude
+// Auto-injected into every program
+
+// Memory management
+extern fn cipr_malloc(size: int): @int;
+extern fn cipr_free(ptr: @int): void;
+
+// Primitive output helpers
+extern fn cipr_print_int(i: int): void;
+extern fn cipr_print_float(f: float): void;
+

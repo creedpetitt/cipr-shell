@@ -1,0 +1,4 @@
+// std/file - File reading and writing
+// Usage: include "src/lib/std/file.cipr";
+// Provides: fopen, fread, fwrite, fclose
+// (Coming soon)

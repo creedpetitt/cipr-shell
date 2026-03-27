@@ -1,0 +1,4 @@
+// std/string - String manipulation utilities
+// Usage: include "src/lib/std/string.cipr";
+// Provides: string length, concat, slice, compare
+// (Coming soon)

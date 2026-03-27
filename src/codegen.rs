@@ -35,16 +35,6 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     pub fn compile(&mut self, root_id: NodeId) -> Result<(), String> {
-        let i64_type = self.context.i64_type();
-        let ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
-        let void_type = self.context.void_type();
-        
-        let malloc_type = ptr_type.fn_type(&[i64_type.into()], false);
-        self.module.add_function("cipr_malloc", malloc_type, Some(inkwell::module::Linkage::External));
-
-        let free_type = void_type.fn_type(&[ptr_type.into()], false);
-        self.module.add_function("cipr_free", free_type, Some(inkwell::module::Linkage::External));
-
         // Create the top-level `main` function (returns i32)
         let i32_type = self.context.i32_type();
         let fn_type = i32_type.fn_type(&[], false);
@@ -856,8 +846,8 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let child_id = self.arena[id].children[0].unwrap();
         let val_ptr = self.evaluate(child_id)?.into_pointer_value();
         
-        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0));
-        let raw_ptr = self.builder.build_pointer_cast(val_ptr, i8_ptr_type, "delete_ptr_cast").unwrap();
+        let i64_ptr_type = self.context.i64_type().ptr_type(inkwell::AddressSpace::from(0));
+        let raw_ptr = self.builder.build_pointer_cast(val_ptr, i64_ptr_type, "delete_ptr_cast").unwrap();
 
         let free_fn = self.module.get_function("cipr_free").unwrap();
         self.builder.build_call(free_fn, &[raw_ptr.into()], "free_call")

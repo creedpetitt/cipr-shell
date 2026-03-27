@@ -1,0 +1,4 @@
+// std/io - Console input/output
+// Usage: include "src/lib/std/io.cipr";
+// Provides: user input, console reading
+// (Coming soon)
