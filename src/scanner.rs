@@ -16,7 +16,6 @@ impl Scanner {
     pub fn new(source: &str) -> Self {
         let mut keywords = HashMap::new();
         keywords.insert("and", TokenType::And);
-        keywords.insert("class", TokenType::Class);
         keywords.insert("else", TokenType::Else);
         keywords.insert("extern", TokenType::Extern);
         keywords.insert("false", TokenType::False);
@@ -30,8 +29,6 @@ impl Scanner {
         keywords.insert("delete", TokenType::Delete);
         keywords.insert("return", TokenType::Return);
         keywords.insert("struct", TokenType::Struct);
-        keywords.insert("super", TokenType::Super);
-        keywords.insert("this", TokenType::This);
         keywords.insert("true", TokenType::True);
         keywords.insert("let", TokenType::Let);
         keywords.insert("while", TokenType::While);
@@ -307,26 +304,23 @@ mod tests {
     #[test]
     fn all_keywords_recognised() {
         let cases = [
-            ("fn",      TokenType::Fn),
-            ("let",     TokenType::Let),
-            ("if",      TokenType::If),
-            ("else",    TokenType::Else),
-            ("while",   TokenType::While),
-            ("for",     TokenType::For),
-            ("return",  TokenType::Return),
-            ("struct",  TokenType::Struct),
-            ("and",     TokenType::And),
-            ("or",      TokenType::Or),
-            ("true",    TokenType::True),
-            ("false",   TokenType::False),
-            ("null",    TokenType::Null),
-            ("new",     TokenType::New),
-            ("delete",  TokenType::Delete),
-            ("extern",  TokenType::Extern),
+            ("fn", TokenType::Fn),
+            ("let", TokenType::Let),
+            ("if", TokenType::If),
+            ("else", TokenType::Else),
+            ("while", TokenType::While),
+            ("for", TokenType::For),
+            ("return", TokenType::Return),
+            ("struct", TokenType::Struct),
+            ("and", TokenType::And),
+            ("or", TokenType::Or),
+            ("true", TokenType::True),
+            ("false", TokenType::False),
+            ("null", TokenType::Null),
+            ("new", TokenType::New),
+            ("delete", TokenType::Delete),
+            ("extern", TokenType::Extern),
             ("include", TokenType::Include),
-            ("class",   TokenType::Class),
-            ("super",   TokenType::Super),
-            ("this",    TokenType::This),
         ];
         for (src, expected) in cases {
             let ts = token_types(src);
@@ -405,10 +399,10 @@ mod tests {
 
     #[test]
     fn single_char_fallbacks_when_not_followed_by_equal() {
-        assert_eq!(token_types("=")[0],  TokenType::Equal);
-        assert_eq!(token_types("!")[0],  TokenType::Bang);
-        assert_eq!(token_types("<")[0],  TokenType::Less);
-        assert_eq!(token_types(">")[0],  TokenType::Greater);
+        assert_eq!(token_types("=")[0], TokenType::Equal);
+        assert_eq!(token_types("!")[0], TokenType::Bang);
+        assert_eq!(token_types("<")[0], TokenType::Less);
+        assert_eq!(token_types(">")[0], TokenType::Greater);
     }
 
     // ── String literals ───────────────────────────────────────────────────────
@@ -566,7 +560,10 @@ mod tests {
         // additional newline bumps the counter a second time.
         let (tokens, _) = scan("\"a\nb\" x");
         assert_eq!(tokens[0].line, 2, "multiline string token ends on line 2");
-        assert_eq!(tokens[1].line, 2, "identifier on same line as closing '\"' is line 2");
+        assert_eq!(
+            tokens[1].line, 2,
+            "identifier on same line as closing '\"' is line 2"
+        );
     }
 
     // ── Comments ──────────────────────────────────────────────────────────────

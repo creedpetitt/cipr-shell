@@ -11,7 +11,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: &'a [Token], arena: &'a mut NodeArena, visited_files: &'a mut HashSet<String>) -> Self {
+    pub fn new(
+        tokens: &'a [Token],
+        arena: &'a mut NodeArena,
+        visited_files: &'a mut HashSet<String>,
+    ) -> Self {
         Self {
             tokens,
             arena,
@@ -103,7 +107,7 @@ impl<'a> Parser<'a> {
             let field_name = self.consume(TokenType::Identifier, "Expect field name.")?;
             self.consume(TokenType::Colon, "Expect ':' after field name.")?;
             let field_type = self.parse_type_annotation();
-            
+
             let field_node = alloc_node_typed(
                 self.arena,
                 NodeType::VarExpr,
@@ -200,7 +204,10 @@ impl<'a> Parser<'a> {
     fn extern_declaration(&mut self) -> Option<NodeId> {
         self.consume(TokenType::Fn, "Expect 'fn' after 'extern'.")?;
         let name = self.consume(TokenType::Identifier, "Expect extern function name.")?;
-        self.consume(TokenType::LeftParen, "Expect '(' after extern function name.")?;
+        self.consume(
+            TokenType::LeftParen,
+            "Expect '(' after extern function name.",
+        )?;
 
         let mut parameters: Vec<Option<NodeId>> = Vec::new();
         if !self.check(TokenType::RightParen) {
@@ -247,7 +254,7 @@ impl<'a> Parser<'a> {
     fn include_declaration(&mut self) -> Option<NodeId> {
         let path = self.consume(TokenType::Str, "Expect string path after 'include'.")?;
         self.consume(TokenType::Semicolon, "Expect ';' after include statement.")?;
-        
+
         let path_str = match &path.literal {
             Value::Str(s) => s.clone(),
             _ => return None,
@@ -257,20 +264,27 @@ impl<'a> Parser<'a> {
 
         if self.visited_files.insert(path_str.clone()) {
             let source = std::fs::read_to_string(&path_str).unwrap_or_else(|_| {
-                println!("[line {}] Error: Could not read included file: {}", path.line, path_str);
+                println!(
+                    "[line {}] Error: Could not read included file: {}",
+                    path.line, path_str
+                );
                 "".to_string()
             });
 
             if !source.is_empty() {
                 let (tokens, scan_error) = crate::scanner::Scanner::new(&source).scan_tokens();
                 if scan_error {
-                    println!("[line {}] Error: Included file has scanner errors.", path.line);
+                    println!(
+                        "[line {}] Error: Included file has scanner errors.",
+                        path.line
+                    );
                 } else {
                     let root_id = {
-                        let mut sub_parser = Parser::new(&tokens, &mut *self.arena, &mut *self.visited_files);
+                        let mut sub_parser =
+                            Parser::new(&tokens, &mut *self.arena, &mut *self.visited_files);
                         sub_parser.parse()
                     };
-                    
+
                     if let Some(id) = root_id {
                         children = self.arena[id].children.clone();
                     }
@@ -336,7 +350,10 @@ impl<'a> Parser<'a> {
     fn delete_statement(&mut self) -> Option<NodeId> {
         let keyword = self.previous().clone();
         let value = self.expression()?;
-        self.consume(TokenType::Semicolon, "Expected ';' after expression to delete.")?;
+        self.consume(
+            TokenType::Semicolon,
+            "Expected ';' after expression to delete.",
+        )?;
         Some(alloc_node(
             self.arena,
             NodeType::StmtDelete,
@@ -698,7 +715,8 @@ impl<'a> Parser<'a> {
             } else if self.match_types(&[TokenType::LeftBracket]) {
                 expr = self.finish_index(expr)?;
             } else if self.match_types(&[TokenType::Dot]) {
-                let name = self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
+                let name =
+                    self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
                 expr = alloc_node(
                     self.arena,
                     NodeType::GetField,
@@ -784,9 +802,10 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> Option<NodeId> {
         if self.match_types(&[TokenType::New]) {
-            let struct_name = self.consume(TokenType::Identifier, "Expect struct name after 'new'.")?;
+            let struct_name =
+                self.consume(TokenType::Identifier, "Expect struct name after 'new'.")?;
             self.consume(TokenType::LeftParen, "Expect '(' after struct name.")?;
-            
+
             let mut args = Vec::new();
             if !self.check(TokenType::RightParen) {
                 loop {
@@ -797,7 +816,7 @@ impl<'a> Parser<'a> {
                 }
             }
             self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
-            
+
             return Some(alloc_node(
                 self.arena,
                 NodeType::ExprNew,
@@ -863,14 +882,14 @@ impl<'a> Parser<'a> {
 
         if self.match_types(&[TokenType::Identifier]) {
             let prev = self.previous().clone();
-            
+
             if self.match_types(&[TokenType::LeftBrace]) {
                 let mut field_inits = Vec::new();
                 while !self.check(TokenType::RightBrace) && !self.is_at_end() {
                     let field_name = self.consume(TokenType::Identifier, "Expect field name.")?;
                     self.consume(TokenType::Colon, "Expect ':' after field name.")?;
                     let expr = self.expression();
-                    
+
                     let field_node = alloc_node(
                         self.arena,
                         NodeType::Assign,
@@ -884,7 +903,10 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
-                self.consume(TokenType::RightBrace, "Expect '}' after struct initialization.")?;
+                self.consume(
+                    TokenType::RightBrace,
+                    "Expect '}' after struct initialization.",
+                )?;
                 return Some(alloc_node(
                     self.arena,
                     NodeType::StructInit,
@@ -985,8 +1007,7 @@ impl<'a> Parser<'a> {
             }
 
             match self.peek().token_type {
-                TokenType::Class
-                | TokenType::Fn
+                TokenType::Fn
                 | TokenType::Let
                 | TokenType::For
                 | TokenType::If

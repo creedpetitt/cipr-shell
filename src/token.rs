@@ -37,7 +37,6 @@ pub enum TokenType {
 
     // Keywords
     And,
-    Class,
     Else,
     Extern,
     False,
@@ -51,8 +50,6 @@ pub enum TokenType {
     Delete,
     Return,
     Struct,
-    Super,
-    This,
     True,
     Let,
     While,
@@ -94,6 +91,9 @@ impl Token {
         }
     }
 
+    #[allow(dead_code)]
+    /// Creates a compiler-generated token for synthesized AST nodes that do not
+    /// come directly from source text (e.g. desugaring/injected constructs).
     pub fn synthetic(token_type: TokenType, lexeme: &str, line: usize) -> Self {
         Self {
             token_type,
