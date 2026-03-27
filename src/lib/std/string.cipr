@@ -1,4 +1,58 @@
-// std/string - String manipulation utilities
-// Usage: include "src/lib/std/string.cipr";
-// Provides: string length, concat, slice, compare
-// (Coming soon)
+// std/string — String operations
+// include "src/lib/std/string.cipr";
+
+extern fn cipr_str_len(s: str): int;
+extern fn cipr_str_concat(a: str, b: str): str;
+extern fn cipr_str_eq(a: str, b: str): int;
+extern fn cipr_str_slice(s: str, start: int, end: int): str;
+extern fn cipr_str_to_int(s: str): int;
+extern fn cipr_str_to_float(s: str): float;
+extern fn cipr_int_to_str(n: int): str;
+extern fn cipr_float_to_str(n: float): str;
+extern fn cipr_str_contains(s: str, sub: str): int;
+extern fn cipr_str_starts_with(s: str, prefix: str): int;
+extern fn cipr_str_free(s: str): void;
+
+fn str_len(s: str): int {
+    return cipr_str_len(s);
+}
+
+fn str_concat(a: str, b: str): str {
+    return cipr_str_concat(a, b);
+}
+
+fn str_eq(a: str, b: str): bool {
+    return cipr_str_eq(a, b) != 0;
+}
+
+fn str_slice(s: str, start: int, end: int): str {
+    return cipr_str_slice(s, start, end);
+}
+
+fn str_to_int(s: str): int {
+    return cipr_str_to_int(s);
+}
+
+fn str_to_float(s: str): float {
+    return cipr_str_to_float(s);
+}
+
+fn int_to_str(n: int): str {
+    return cipr_int_to_str(n);
+}
+
+fn float_to_str(n: float): str {
+    return cipr_float_to_str(n);
+}
+
+fn str_contains(s: str, sub: str): bool {
+    return cipr_str_contains(s, sub) != 0;
+}
+
+fn str_starts_with(s: str, prefix: str): bool {
+    return cipr_str_starts_with(s, prefix) != 0;
+}
+
+fn str_free(s: str): void {
+    cipr_str_free(s);
+}
