@@ -57,7 +57,7 @@ pub struct Node {
     pub token: Token,
     pub value: Value,
     pub children: Vec<Option<NodeId>>,
-    pub type_annotation: Option<String>,
+    pub type_annotation: Option<CiprType>,
     pub resolved_type: CiprType,
 }
 
@@ -67,7 +67,7 @@ impl Node {
         token: Token,
         value: Value,
         children: Vec<Option<NodeId>>,
-        type_annotation: Option<String>,
+        type_annotation: Option<CiprType>,
     ) -> Self {
         Self {
             node_type,
@@ -96,7 +96,7 @@ pub fn alloc_node_typed(
     token: Token,
     value: Value,
     children: Vec<Option<NodeId>>,
-    type_annotation: Option<String>,
+    type_annotation: Option<CiprType>,
 ) -> NodeId {
     arena.alloc(Node::new(
         node_type,

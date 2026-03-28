@@ -1,5 +1,6 @@
-use crate::ast::{alloc_node, alloc_node_typed, NodeArena, NodeId, NodeType};
+use crate::ast::{alloc_node, alloc_node_typed, CiprType, NodeArena, NodeId, NodeType};
 use crate::token::{Token, TokenType, Value};
+use crate::type_syntax;
 use std::collections::HashSet;
 
 pub struct Parser<'a> {
@@ -929,7 +930,7 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn parse_type_annotation(&mut self) -> Option<String> {
+    fn parse_type_annotation(&mut self) -> Option<CiprType> {
         let mut pointer_depth = 0usize;
         while self.match_types(&[TokenType::At]) {
             pointer_depth += 1;
@@ -957,14 +958,14 @@ impl<'a> Parser<'a> {
             )?;
             self.consume(TokenType::Colon, "Expect ':' before function type return.")?;
             let ret = self.parse_type_annotation()?;
-            format!("fn({}):{}", params.join(","), ret)
+            CiprType::Callable(params, Box::new(ret))
         } else {
             let type_token = self.consume(TokenType::Identifier, "Expect type name.")?;
-            type_token.lexeme
+            type_syntax::parse_named_type(&type_token.lexeme)
         };
 
         for _ in 0..pointer_depth {
-            core = format!("@{}", core);
+            core = CiprType::Pointer(Box::new(core));
         }
 
         Some(core)
