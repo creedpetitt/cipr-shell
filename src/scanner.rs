@@ -684,6 +684,24 @@ mod tests {
     }
 
     #[test]
+    fn function_type_annotation_sequence() {
+        let ts = token_types("let cb: fn(int, fn(int): int): fn(int): int;");
+        assert_eq!(ts[0], TokenType::Let);
+        assert_eq!(ts[1], TokenType::Identifier); // cb
+        assert_eq!(ts[2], TokenType::Colon);
+        assert_eq!(ts[3], TokenType::Fn);
+        assert_eq!(ts[4], TokenType::LeftParen);
+        assert_eq!(ts[5], TokenType::Identifier); // int
+        assert_eq!(ts[6], TokenType::Comma);
+        assert_eq!(ts[7], TokenType::Fn);
+        assert_eq!(ts[8], TokenType::LeftParen);
+        assert_eq!(ts[9], TokenType::Identifier); // int
+        assert_eq!(ts[10], TokenType::RightParen);
+        assert_eq!(ts[11], TokenType::Colon);
+        assert_eq!(ts[12], TokenType::Identifier); // int
+    }
+
+    #[test]
     fn comparison_operators_sequence() {
         let ts = token_types("a == b != c <= d >= e");
         assert_eq!(ts[1], TokenType::EqualEqual);
