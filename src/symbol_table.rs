@@ -22,7 +22,10 @@ impl<'ctx> SymbolTable<'ctx> {
     }
 
     pub fn define(&mut self, name: &str, pointer: PointerValue<'ctx>) {
-        self.scopes.last_mut().unwrap().insert(name.to_string(), pointer);
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), pointer);
     }
 
     pub fn get(&self, name: &str) -> Option<PointerValue<'ctx>> {

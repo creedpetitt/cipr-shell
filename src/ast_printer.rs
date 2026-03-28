@@ -78,12 +78,8 @@ impl<'a> AstPrinter<'a> {
                 let children: Vec<_> = node.children.clone();
                 self.parenthesize(&format!("fn {name}"), &children)
             }
-            NodeType::AddressOf => {
-                self.parenthesize("@", &[node.children[0]])
-            }
-            NodeType::Dereference => {
-                self.parenthesize("deref", &[node.children[0]])
-            }
+            NodeType::AddressOf => self.parenthesize("@", &[node.children[0]]),
+            NodeType::Dereference => self.parenthesize("deref", &[node.children[0]]),
             NodeType::AssignDeref => {
                 let children = [node.children[0], node.children[1]];
                 self.parenthesize("assign_deref", &children)
@@ -117,9 +113,7 @@ impl<'a> AstPrinter<'a> {
                 let name = node.token.lexeme.clone();
                 self.parenthesize(&format!("new {name}"), &node.children)
             }
-            NodeType::StmtDelete => {
-                self.parenthesize("delete", &[node.children[0]])
-            }
+            NodeType::StmtDelete => self.parenthesize("delete", &[node.children[0]]),
         }
     }
 
