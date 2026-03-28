@@ -7,6 +7,7 @@ mod scanner;
 mod symbol_table;
 mod token;
 mod type_checker;
+mod type_syntax;
 
 use std::env;
 
@@ -28,4 +29,3 @@ fn main() {
         std::process::exit(1);
     }
 }
-
