@@ -125,7 +125,6 @@ impl<'a> TypeChecker<'a> {
                 let child = self.arena[id].children[0].expect("Grouping node has no child");
                 self.check(child)
             }
-            _ => CiprType::Unknown,
         };
 
         self.arena[id].resolved_type = t.clone();
