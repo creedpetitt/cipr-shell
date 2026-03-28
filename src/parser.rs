@@ -930,12 +930,44 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type_annotation(&mut self) -> Option<String> {
-        let mut prefix = String::new();
+        let mut pointer_depth = 0usize;
         while self.match_types(&[TokenType::At]) {
-            prefix.push('@');
+            pointer_depth += 1;
         }
-        let type_token = self.consume(TokenType::Identifier, "Expect type name.")?;
-        Some(format!("{}{}", prefix, type_token.lexeme))
+
+        let mut core = if self.match_types(&[TokenType::Fn]) {
+            self.consume(
+                TokenType::LeftParen,
+                "Expect '(' after 'fn' in function type.",
+            )?;
+
+            let mut params = Vec::new();
+            if !self.check(TokenType::RightParen) {
+                loop {
+                    params.push(self.parse_type_annotation()?);
+                    if !self.match_types(&[TokenType::Comma]) {
+                        break;
+                    }
+                }
+            }
+
+            self.consume(
+                TokenType::RightParen,
+                "Expect ')' after function type parameters.",
+            )?;
+            self.consume(TokenType::Colon, "Expect ':' before function type return.")?;
+            let ret = self.parse_type_annotation()?;
+            format!("fn({}):{}", params.join(","), ret)
+        } else {
+            let type_token = self.consume(TokenType::Identifier, "Expect type name.")?;
+            type_token.lexeme
+        };
+
+        for _ in 0..pointer_depth {
+            core = format!("@{}", core);
+        }
+
+        Some(core)
     }
 
     // ── Utilities ──

@@ -71,22 +71,90 @@ impl<'a> TypeChecker<'a> {
 
     fn parse_type_annotation(annotation: &Option<String>) -> CiprType {
         match annotation {
-            Some(s) => {
-                if s.starts_with('@') {
-                    let inner = s.trim_start_matches('@').to_string();
-                    return CiprType::Pointer(Box::new(Self::parse_type_annotation(&Some(inner))));
-                }
-                match s.as_str() {
-                    "int" => CiprType::Int,
-                    "float" => CiprType::Float,
-                    "str" => CiprType::Str,
-                    "bool" => CiprType::Bool,
-                    "void" => CiprType::Void,
-                    _ => CiprType::Struct(s.clone()),
-                }
-            }
+            Some(s) => Self::parse_type_expr(s),
             None => CiprType::Unknown,
         }
+    }
+
+    fn parse_type_expr(s: &str) -> CiprType {
+        if let Some(inner) = s.strip_prefix('@') {
+            return CiprType::Pointer(Box::new(Self::parse_type_expr(inner)));
+        }
+
+        if s.starts_with("fn(") {
+            return Self::parse_fn_type(s);
+        }
+
+        match s {
+            "int" => CiprType::Int,
+            "float" => CiprType::Float,
+            "str" => CiprType::Str,
+            "bool" => CiprType::Bool,
+            "void" => CiprType::Void,
+            _ => CiprType::Struct(s.to_string()),
+        }
+    }
+
+    fn parse_fn_type(s: &str) -> CiprType {
+        if !s.starts_with("fn(") {
+            return CiprType::Unknown;
+        }
+
+        let mut depth = 0i32;
+        let mut close_idx = None;
+        for (i, ch) in s.char_indices() {
+            if ch == '(' {
+                depth += 1;
+            } else if ch == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    close_idx = Some(i);
+                    break;
+                }
+            }
+        }
+
+        let close_idx = match close_idx {
+            Some(i) => i,
+            None => return CiprType::Unknown,
+        };
+
+        let params_src = &s[3..close_idx];
+        let suffix = &s[close_idx + 1..];
+        if !suffix.starts_with(':') {
+            return CiprType::Unknown;
+        }
+        let ret_src = &suffix[1..];
+
+        let params = Self::split_top_level(params_src)
+            .into_iter()
+            .map(Self::parse_type_expr)
+            .collect::<Vec<_>>();
+        let ret = Self::parse_type_expr(ret_src);
+        CiprType::Callable(params, Box::new(ret))
+    }
+
+    fn split_top_level(src: &str) -> Vec<&str> {
+        let mut out = Vec::new();
+        if src.is_empty() {
+            return out;
+        }
+
+        let mut depth = 0i32;
+        let mut start = 0usize;
+        for (i, ch) in src.char_indices() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                ',' if depth == 0 => {
+                    out.push(&src[start..i]);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(&src[start..]);
+        out
     }
 
     pub fn check(&mut self, id: NodeId) -> CiprType {

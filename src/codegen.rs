@@ -1,8 +1,8 @@
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::{BasicMetadataTypeEnum, BasicType};
-use inkwell::values::BasicValueEnum;
+use inkwell::types::{BasicMetadataTypeEnum, BasicType, FunctionType};
+use inkwell::values::{BasicValueEnum, CallableValue};
 
 use crate::ast::{CiprType, NodeArena, NodeId, NodeType};
 use crate::symbol_table::SymbolTable;
@@ -16,6 +16,7 @@ pub struct Codegen<'a, 'ctx> {
     pub symbol_table: SymbolTable<'ctx>,
     pub struct_types:
         std::collections::HashMap<String, (inkwell::types::StructType<'ctx>, Vec<String>)>,
+    pub function_wrappers: std::collections::HashMap<String, inkwell::values::FunctionValue<'ctx>>,
 }
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
@@ -32,7 +33,116 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             arena,
             symbol_table: SymbolTable::new(),
             struct_types: std::collections::HashMap::new(),
+            function_wrappers: std::collections::HashMap::new(),
         }
+    }
+
+    fn callable_llvm_type(&self) -> inkwell::types::StructType<'ctx> {
+        let i8_ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::from(0));
+        self.context
+            .struct_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false)
+    }
+
+    fn build_function_type(
+        &self,
+        param_types: &[BasicMetadataTypeEnum<'ctx>],
+        ret_type: &CiprType,
+    ) -> Result<FunctionType<'ctx>, String> {
+        match ret_type {
+            CiprType::Void => Ok(self.context.void_type().fn_type(param_types, false)),
+            t => {
+                let basic = self.get_llvm_type(t)?;
+                match basic {
+                    inkwell::types::BasicTypeEnum::IntType(i) => Ok(i.fn_type(param_types, false)),
+                    inkwell::types::BasicTypeEnum::FloatType(f) => {
+                        Ok(f.fn_type(param_types, false))
+                    }
+                    inkwell::types::BasicTypeEnum::PointerType(p) => {
+                        Ok(p.fn_type(param_types, false))
+                    }
+                    inkwell::types::BasicTypeEnum::StructType(s) => {
+                        Ok(s.fn_type(param_types, false))
+                    }
+                    _ => Err(format!("Unsupported function return type: {:?}", ret_type)),
+                }
+            }
+        }
+    }
+
+    fn ensure_wrapper_for_function(
+        &mut self,
+        name: &str,
+        direct_fn: inkwell::values::FunctionValue<'ctx>,
+        param_list: &[CiprType],
+        ret_type: &CiprType,
+    ) -> Result<inkwell::values::FunctionValue<'ctx>, String> {
+        if let Some(existing) = self.function_wrappers.get(name) {
+            return Ok(*existing);
+        }
+
+        let wrapper_name = format!("__cipr_cbwrap_{}", name);
+        let i8_ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::from(0));
+
+        let mut wrapper_params: Vec<BasicMetadataTypeEnum<'ctx>> = vec![i8_ptr_type.into()];
+        for p in param_list {
+            wrapper_params.push(self.get_llvm_type(p)?.into());
+        }
+
+        let wrapper_ty = self.build_function_type(&wrapper_params, ret_type)?;
+        let wrapper_fn = self.module.add_function(&wrapper_name, wrapper_ty, None);
+
+        let prev_bb = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(wrapper_fn, "entry");
+        self.builder.position_at_end(entry);
+
+        let mut direct_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = Vec::new();
+        for (i, p) in param_list.iter().enumerate() {
+            let arg = wrapper_fn
+                .get_nth_param((i + 1) as u32)
+                .ok_or_else(|| "Missing wrapper argument".to_string())?;
+            let expected_ty = self.get_llvm_type(p)?;
+            if arg.get_type() != expected_ty {
+                return Err(format!(
+                    "Wrapper arg type mismatch for '{}': expected {:?}, got {:?}",
+                    name,
+                    expected_ty,
+                    arg.get_type()
+                ));
+            }
+            direct_args.push(arg.into());
+        }
+
+        let call_site = self
+            .builder
+            .build_call(direct_fn, &direct_args, &format!("{}_direct_call", name))
+            .map_err(|e| e.to_string())?;
+
+        match ret_type {
+            CiprType::Void => {
+                self.builder.build_return(None).map_err(|e| e.to_string())?;
+            }
+            _ => match call_site.try_as_basic_value() {
+                inkwell::values::ValueKind::Basic(v) => {
+                    self.builder
+                        .build_return(Some(&v))
+                        .map_err(|e| e.to_string())?;
+                }
+                _ => return Err(format!("Function '{}' wrapper expected return value", name)),
+            },
+        }
+
+        if let Some(bb) = prev_bb {
+            self.builder.position_at_end(bb);
+        }
+
+        self.function_wrappers.insert(name.to_string(), wrapper_fn);
+        Ok(wrapper_fn)
     }
 
     pub fn compile(&mut self, root_id: NodeId) -> Result<(), String> {
@@ -270,35 +380,78 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let callee_id = children[0].expect("Call missing callee");
         let callee_name = self.arena[callee_id].token.lexeme.clone();
 
-        if callee_name == "print" {
+        if self.arena[callee_id].node_type == NodeType::VarExpr && callee_name == "print" {
             let arg_id = children[1].expect("Print missing argument");
             return self.emit_print_call(arg_id);
         }
 
-        // Handle user-defined function calls and extern functions via Linker
-        let function = self
-            .module
-            .get_function(&callee_name)
-            .ok_or_else(|| format!("Undefined function: {}", callee_name))?;
+        let callee_type = self.arena[callee_id].resolved_type.clone();
+        let (param_types, ret_type) = match callee_type {
+            CiprType::Callable(params, ret) => (params, *ret),
+            other => return Err(format!("Cannot call non-callable type: {:?}", other)),
+        };
 
-        let mut args = Vec::new();
+        if param_types.len() != children.len().saturating_sub(1) {
+            return Err(format!(
+                "Argument count mismatch: expected {}, got {}",
+                param_types.len(),
+                children.len().saturating_sub(1)
+            ));
+        }
+
+        let callable_struct = self.evaluate(callee_id)?.into_struct_value();
+        let fn_ptr_raw = self
+            .builder
+            .build_extract_value(callable_struct, 0, "call_fn_ptr")
+            .map_err(|e| e.to_string())?
+            .into_pointer_value();
+        let env_ptr = self
+            .builder
+            .build_extract_value(callable_struct, 1, "call_env_ptr")
+            .map_err(|e| e.to_string())?
+            .into_pointer_value();
+
+        let mut call_param_types: Vec<BasicMetadataTypeEnum<'ctx>> = Vec::new();
+        call_param_types.push(
+            self.context
+                .i8_type()
+                .ptr_type(inkwell::AddressSpace::from(0))
+                .into(),
+        );
+        for p in &param_types {
+            call_param_types.push(self.get_llvm_type(p)?.into());
+        }
+
+        let fn_sig = self.build_function_type(&call_param_types, &ret_type)?;
+        let typed_fn_ptr = self
+            .builder
+            .build_pointer_cast(
+                fn_ptr_raw,
+                fn_sig.ptr_type(inkwell::AddressSpace::from(0)),
+                "typed_call_ptr",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let mut args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![env_ptr.into()];
         for i in 1..children.len() {
             if let Some(arg_id) = children[i] {
                 args.push(self.evaluate(arg_id)?.into());
             }
         }
 
+        let callable = CallableValue::try_from(typed_fn_ptr)
+            .map_err(|_| "Failed to convert function pointer to callable".to_string())?;
         let call_site = self
             .builder
-            .build_call(function, &args, &format!("{}_call", callee_name))
+            .build_call(callable, &args, "fnptr_call")
             .map_err(|e| e.to_string())?;
 
-        match call_site.try_as_basic_value() {
-            inkwell::values::ValueKind::Basic(v) => Ok(v),
-            inkwell::values::ValueKind::Instruction(_) => {
-                // If it returns void, return a dummy i32 0 for now
-                Ok(self.context.i32_type().const_int(0, false).into())
-            }
+        match ret_type {
+            CiprType::Void => Ok(self.context.i32_type().const_int(0, false).into()),
+            _ => match call_site.try_as_basic_value() {
+                inkwell::values::ValueKind::Basic(v) => Ok(v),
+                _ => Err("Callable unexpectedly returned void".to_string()),
+            },
         }
     }
 
@@ -567,16 +720,77 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     fn visit_var_expr(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
         let name = self.arena[id].token.lexeme.clone();
 
-        let ptr = match self.symbol_table.get(&name) {
-            Some(p) => p,
-            None => return Err(format!("Undefined variable in codegen: {}", name)),
+        if let Some(ptr) = self.symbol_table.get(&name) {
+            return Ok(self
+                .builder
+                .build_load(ptr, &name)
+                .map_err(|e| e.to_string())?);
+        }
+
+        let callable_type = match self.arena[id].resolved_type.clone() {
+            CiprType::Callable(params, ret) => (params, *ret),
+            _ => return Err(format!("Undefined variable in codegen: {}", name)),
         };
 
-        // Load the value out of the memory address (Inkwell 0.8 build_load takes ptr and name)
-        Ok(self
+        let direct_fn = self
+            .module
+            .get_function(&name)
+            .ok_or_else(|| format!("Undefined function '{}'", name))?;
+
+        let i8_ptr_type = self
+            .context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::from(0));
+
+        let mut callable_param_types: Vec<BasicMetadataTypeEnum<'ctx>> = vec![i8_ptr_type.into()];
+        for p in &callable_type.0 {
+            callable_param_types.push(self.get_llvm_type(p)?.into());
+        }
+        let expected_sig = self.build_function_type(&callable_param_types, &callable_type.1)?;
+        let expected_ptr_ty = expected_sig.ptr_type(inkwell::AddressSpace::from(0));
+
+        let fn_ptr_i8 = if direct_fn.get_type() == expected_sig {
+            let casted = self
+                .builder
+                .build_pointer_cast(
+                    direct_fn.as_global_value().as_pointer_value(),
+                    expected_ptr_ty,
+                    "fnptr_cast",
+                )
+                .map_err(|e| e.to_string())?;
+            self.builder
+                .build_pointer_cast(casted, i8_ptr_type, "fnptr_to_i8")
+                .map_err(|e| e.to_string())?
+        } else {
+            let wrapper = self.ensure_wrapper_for_function(
+                &name,
+                direct_fn,
+                &callable_type.0,
+                &callable_type.1,
+            )?;
+            self.builder
+                .build_pointer_cast(
+                    wrapper.as_global_value().as_pointer_value(),
+                    i8_ptr_type,
+                    "wrapper_to_i8",
+                )
+                .map_err(|e| e.to_string())?
+        };
+
+        let callable_ty = self.callable_llvm_type();
+        let mut callable_val = callable_ty.get_undef();
+        callable_val = self
             .builder
-            .build_load(ptr, &name)
-            .map_err(|e| e.to_string())?)
+            .build_insert_value(callable_val, fn_ptr_i8, 0, "callable_fn")
+            .map_err(|e| e.to_string())?
+            .into_struct_value();
+        callable_val = self
+            .builder
+            .build_insert_value(callable_val, i8_ptr_type.const_null(), 1, "callable_env")
+            .map_err(|e| e.to_string())?
+            .into_struct_value();
+
+        Ok(callable_val.into())
     }
 
     fn visit_literal(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
@@ -946,12 +1160,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     .ok_or_else(|| format!("Unknown struct '{}'", name))?;
                 Ok((*struct_type).into())
             }
+            CiprType::Callable(_, _) => Ok(self.callable_llvm_type().into()),
             CiprType::Void => Err("Void is not a first-class value type".to_string()),
             CiprType::Unknown => Err("Type was not resolved before code generation".to_string()),
-            _ => Err(format!(
-                "Unsupported LLVM type mapping for: {:?}",
-                resolved_type
-            )),
         }
     }
 
