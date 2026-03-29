@@ -64,8 +64,8 @@ fn run_cipr(source: &str) -> CiprOutput {
 /// Run a fixture file by name (from `tests/fixtures/`).
 fn run_fixture(name: &str) -> CiprOutput {
     let path = format!("{}/tests/fixtures/{}", PROJECT_ROOT, name);
-    let source = std::fs::read_to_string(&path)
-        .unwrap_or_else(|_| panic!("fixture not found: {}", path));
+    let source =
+        std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("fixture not found: {}", path));
     run_cipr(&source)
 }
 
@@ -77,8 +77,7 @@ fn assert_output(source: &str, expected: &str) {
     assert!(
         out.success,
         "program failed to compile/run.\nstderr:\n{}\nstdout:\n{}",
-        out.stderr,
-        out.stdout
+        out.stderr, out.stdout
     );
     assert_eq!(
         out.stdout, expected,
@@ -375,18 +374,12 @@ mod control_flow {
 
     #[test]
     fn if_true_takes_then_branch() {
-        assert_output(
-            "if (true) { print(1); } else { print(0); }",
-            "1\n",
-        );
+        assert_output("if (true) { print(1); } else { print(0); }", "1\n");
     }
 
     #[test]
     fn if_false_takes_else_branch() {
-        assert_output(
-            "if (false) { print(1); } else { print(0); }",
-            "0\n",
-        );
+        assert_output("if (false) { print(1); } else { print(0); }", "0\n");
     }
 
     #[test]
@@ -569,6 +562,53 @@ print(sum3(1, 2, 3));
             out.stderr
         );
         assert_eq!(out.stdout, "0\n1\n5\n55\n");
+    }
+
+    #[test]
+    fn callback_variable_call() {
+        assert_output(
+            r#"
+fn double(n: int): int {
+    return n * 2;
+}
+
+let cb: fn(int): int = double;
+print(cb(21));
+"#,
+            "42\n",
+        );
+    }
+
+    #[test]
+    fn callback_parameter_call() {
+        assert_output(
+            r#"
+fn square(n: int): int {
+    return n * n;
+}
+
+fn apply(f: fn(int): int, x: int): int {
+    return f(x);
+}
+
+print(apply(square, 9));
+"#,
+            "81\n",
+        );
+    }
+
+    #[test]
+    fn callback_nested_type_annotation() {
+        assert_output(
+            r#"
+fn inc(n: int): int { return n + 1; }
+fn compose_apply(g: fn(int): int, f: fn(int): int, x: int): int {
+    return g(f(x));
+}
+print(compose_apply(inc, inc, 5));
+"#,
+            "7\n",
+        );
     }
 }
 
@@ -813,10 +853,7 @@ mod stdlib_string {
 
     #[test]
     fn str_len() {
-        assert_output(
-            &with_string_stdlib(r#"print(str_len("hello"));"#),
-            "5\n",
-        );
+        assert_output(&with_string_stdlib(r#"print(str_len("hello"));"#), "5\n");
     }
 
     #[test]
@@ -853,10 +890,7 @@ mod stdlib_string {
 
     #[test]
     fn str_to_int() {
-        assert_output(
-            &with_string_stdlib(r#"print(str_to_int("42"));"#),
-            "42\n",
-        );
+        assert_output(&with_string_stdlib(r#"print(str_to_int("42"));"#), "42\n");
     }
 
     #[test]
@@ -869,10 +903,7 @@ mod stdlib_string {
 
     #[test]
     fn int_to_str() {
-        assert_output(
-            &with_string_stdlib(r#"print(int_to_str(100));"#),
-            "100\n",
-        );
+        assert_output(&with_string_stdlib(r#"print(int_to_str(100));"#), "100\n");
     }
 
     #[test]
@@ -971,10 +1002,13 @@ print(a);
         assert!(out.success, "file test failed.\nstderr:\n{}", out.stderr);
 
         let lines: Vec<&str> = out.stdout.lines().collect();
-        assert_eq!(lines[0], "0",    "file_write should return 0 on success");
+        assert_eq!(lines[0], "0", "file_write should return 0 on success");
         assert_eq!(lines[1], "true", "file should exist after write");
-        assert!(lines[2].contains("hello cipr"), "file_read content mismatch");
-        assert_eq!(lines[3], "0",    "file_append should return 0 on success");
+        assert!(
+            lines[2].contains("hello cipr"),
+            "file_read content mismatch"
+        );
+        assert_eq!(lines[3], "0", "file_append should return 0 on success");
     }
 
     #[test]
@@ -1006,13 +1040,16 @@ print(t);
         );
         assert!(out.success, "time() failed.\nstderr:\n{}", out.stderr);
 
-        let value: f64 = out
-            .stdout
-            .trim()
-            .parse()
-            .unwrap_or_else(|_| panic!("could not parse time() output: '{}'", out.stdout.trim()));
+        let value: f64 =
+            out.stdout.trim().parse().unwrap_or_else(|_| {
+                panic!("could not parse time() output: '{}'", out.stdout.trim())
+            });
 
-        assert!(value > 0.0, "time() returned a non-positive value: {}", value);
+        assert!(
+            value > 0.0,
+            "time() returned a non-positive value: {}",
+            value
+        );
     }
 }
 
@@ -1044,5 +1081,199 @@ fn add(a: int, b: int): int { return a + b; }
 print(add(1));
 "#,
         );
+    }
+}
+
+// ── Server Test Infrastructure ────────────────────────────────────────────────
+
+/// Run a cipr script in the background (which should start a server), wait for it
+/// to boot, send a TCP request, capture the response, and wait for the process to exit.
+/// The script MUST eventually call `http_stop()` or `net_close()` and exit for this to return.
+fn run_cipr_server(source: &str, port: u16, request_bytes: &[u8]) -> (CiprOutput, String) {
+    use std::io::{Read, Write};
+
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let filename = format!("cipr_test_srv_{}_{}.cipr", std::process::id(), n);
+    let full_path = format!("{}/{}", PROJECT_ROOT, &filename);
+
+    std::fs::write(&full_path, source).expect("failed to write temp .cipr file");
+
+    let mut child = Command::new(BINARY)
+        .arg(&filename)
+        .current_dir(PROJECT_ROOT)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("failed to invoke cipr binary: {}", e));
+
+    // Stream output in background so we don't block
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 1024];
+        while let Ok(n) = std::io::Read::read(&mut stdout, &mut buf) {
+            if n == 0 { break; }
+            print!("{}", String::from_utf8_lossy(&buf[..n]));
+        }
+    });
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 1024];
+        while let Ok(n) = std::io::Read::read(&mut stderr, &mut buf) {
+            if n == 0 { break; }
+            eprint!("{}", String::from_utf8_lossy(&buf[..n]));
+        }
+    });
+
+    // Retry loop: The Cipr compiler takes time to compile the C runtime before the server starts.
+    let mut stream_opt = None;
+    for _ in 0..50 {
+        if let Ok(mut stream) = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)) {
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+            let _ = stream.write_all(request_bytes);
+            stream_opt = Some(stream);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+
+    let mut response = String::new();
+    if let Some(mut stream) = stream_opt {
+        let _ = stream.read_to_string(&mut response);
+    } else {
+        // If we couldn't connect, kill the child so we don't hang the test suite
+        let _ = child.kill();
+        panic!("Failed to connect to Cipr server on port {} after 10 seconds", port);
+    }
+
+    let status = child.wait().unwrap();
+    let _ = std::fs::remove_file(&full_path);
+
+    (
+        CiprOutput {
+            stdout: String::new(), // Output already streamed to real stdout
+            stderr: String::new(),
+            success: status.success(),
+        },
+        response,
+    )
+}
+
+// ── stdlib_http ───────────────────────────────────────────────────────────────
+
+mod stdlib_http {
+    use super::*;
+
+    #[test]
+    fn basic_http_get() {
+        let source = r#"
+include "src/lib/std/http.cipr";
+
+fn handler(): void {
+    http_ok("Hello from Cipr HTTP!");
+    http_stop(); // Stop the server so the test completes
+}
+
+http_get("/test", handler);
+http_start(8081);
+"#;
+        let request = b"GET /test HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+        let (out, response) = run_cipr_server(source, 8081, request);
+        
+        assert!(out.success, "HTTP server failed.\nstderr:\n{}", out.stderr);
+        assert!(response.contains("HTTP/1.1 200 OK"), "Missing 200 OK in response: {}", response);
+        assert!(response.contains("Hello from Cipr HTTP!"), "Missing body in response: {}", response);
+    }
+
+    #[test]
+    fn http_post_body() {
+        let source = r#"
+include "src/lib/std/http.cipr";
+fn handler(): void {
+    let body: str = http_body();
+    http_ok("Received: " + body);
+    http_stop();
+}
+http_post("/submit", handler);
+http_start(8085);
+"#;
+        let request = b"POST /submit HTTP/1.1\r\nHost: localhost\r\nContent-Length: 9\r\nConnection: close\r\n\r\nMY_DATA_1";
+        let (_, response) = run_cipr_server(source, 8085, request);
+        assert!(response.contains("Received: MY_DATA_1"), "POST body failed: {}", response);
+    }
+
+    #[test]
+    fn http_json_response() {
+        let source = r#"
+include "src/lib/std/http.cipr";
+fn handler(): void {
+    http_json(201, "{\"status\":\"ok\"}");
+    http_stop();
+}
+http_get("/json", handler);
+http_start(8086);
+"#;
+        let request = b"GET /json HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        let (_, response) = run_cipr_server(source, 8086, request);
+        assert!(response.contains("HTTP/1.1 201 Created") || response.contains("201"), "Status code failed");
+        assert!(response.contains("Content-Type: application/json"), "Content-Type header failed");
+        assert!(response.contains("{\"status\":\"ok\"}"), "JSON body failed");
+    }
+}
+
+// ── stdlib_net ────────────────────────────────────────────────────────────────
+
+mod stdlib_net {
+    use super::*;
+
+    #[test]
+    fn basic_tcp_echo() {
+        let source = r#"
+include "src/lib/std/net.cipr";
+
+let server_fd: int = net_listen(8082, false);
+if (server_fd >= 0) {
+    let client_fd: int = net_accept(server_fd, false);
+    if (client_fd >= 0) {
+        let data: str = net_read(client_fd, 1024);
+        net_write(client_fd, "ECHO: ");
+        net_write(client_fd, data);
+        net_close(client_fd);
+    }
+    net_close(server_fd);
+}
+"#;
+        let request = b"Hello TCP";
+        let (out, response) = run_cipr_server(source, 8082, request);
+        
+        assert!(out.success, "TCP server failed.\nstderr:\n{}", out.stderr);
+        assert_eq!(response, "ECHO: Hello TCP");
+    }
+
+    #[test]
+    fn basic_tcp_client() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::Write;
+                let _ = stream.write_all(b"HELLO FROM RUST");
+            }
+        });
+
+        let source = format!(r#"
+include "src/lib/std/net.cipr";
+
+let client_fd: int = net_connect("127.0.0.1", {}, false);
+if (client_fd >= 0) {{
+    let data: str = net_read(client_fd, 1024);
+    print(data);
+    net_close(client_fd);
+}} else {{
+    print("Failed to connect");
+}}
+"#, port);
+
+        assert_output(&source, "HELLO FROM RUST\n");
     }
 }
