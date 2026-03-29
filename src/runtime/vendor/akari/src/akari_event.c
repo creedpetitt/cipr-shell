@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 199309L
 #include "akari_event.h"
 #include "akari_internal.h"
 #include <string.h>

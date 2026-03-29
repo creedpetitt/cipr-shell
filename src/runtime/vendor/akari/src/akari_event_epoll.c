@@ -30,7 +30,7 @@ void akari_run_epoll(int srv_fd, akari_callback on_data) {
         for (int i = 0; i < nfds; i++) {
             if (events[i].data.fd == srv_fd) {
                 struct sockaddr_in client_addr;
-                int client_fd = akari_tcp_accept(srv_fd, &client_addr);
+                int client_fd = akari_tcp_accept(srv_fd, &client_addr, 1);
                 if (client_fd != -1) {
                     akari_connection* conn = akari_get_conn(client_fd);
                     if (conn) {

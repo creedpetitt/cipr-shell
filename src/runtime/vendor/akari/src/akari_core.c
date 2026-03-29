@@ -1,6 +1,7 @@
 #include "akari_core.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 static int set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -9,17 +10,19 @@ static int set_nonblocking(int fd) {
     return 0;
 }
 
-int akari_tcp_init(void) {
+int akari_tcp_init(int nonblocking) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd == -1) {
         AKARI_LOG("could not open socket");
         return -1;
     }
     
-    if (set_nonblocking(fd) == -1) {
-        AKARI_LOG("could not set socket to non-blocking");
-        close(fd);
-        return -1;
+    if (nonblocking) {
+        if (set_nonblocking(fd) == -1) {
+            AKARI_LOG("could not set socket to non-blocking");
+            close(fd);
+            return -1;
+        }
     }
     return fd;
 }
@@ -40,13 +43,14 @@ int akari_tcp_listen(int fd) {
     return result;
 }
 
-int akari_tcp_accept(int fd, struct sockaddr_in* addr) {
+int akari_tcp_accept(int fd, struct sockaddr_in* addr, int nonblocking) {
     for (;;) {
         socklen_t addr_len = sizeof(struct sockaddr_in);
         int client_fd = accept(fd, (struct sockaddr*)addr, addr ? &addr_len : NULL);
         
         if (client_fd == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            break;
+            if (nonblocking) break;
+            continue;
         }
         if (client_fd == -1 && (errno == EINTR || errno == ECONNABORTED)) {
             continue;
@@ -56,17 +60,18 @@ int akari_tcp_accept(int fd, struct sockaddr_in* addr) {
             return -1;
         }
         
-        if (set_nonblocking(client_fd) == -1) {
-            AKARI_LOG("could not set client socket to non-blocking");
-            close(client_fd);
-            return -1;
+        if (nonblocking) {
+            if (set_nonblocking(client_fd) == -1) {
+                AKARI_LOG("could not set client socket to non-blocking");
+                close(client_fd);
+                return -1;
+            }
         }
         
         return client_fd;
     }
     return -1;
 }
-
 
 ssize_t akari_tcp_recv(int fd, void *buf, size_t size) {
     while (1) {
@@ -104,7 +109,7 @@ struct sockaddr_in akari_addr_init(const char* host, uint16_t port) {
 }
 
 int akari_tcp_start(uint16_t port) {
-    int fd = akari_tcp_init();
+    int fd = akari_tcp_init(1); // Non-blocking for HTTP event loop
     if (fd == -1) {
         return -1;
     }
