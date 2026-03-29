@@ -73,6 +73,28 @@ int akari_tcp_accept(int fd, struct sockaddr_in* addr, int nonblocking) {
     return -1;
 }
 
+int akari_tcp_connect(const char* host, uint16_t port, int nonblocking) {
+    int fd = akari_tcp_init(nonblocking);
+    if (fd == -1) return -1;
+
+    struct sockaddr_in addr = akari_addr_init(host, port);
+    if (addr.sin_family == 0) {
+        close(fd);
+        return -1;
+    }
+
+    int res = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
+    if (res == -1) {
+        if (nonblocking && errno == EINPROGRESS) {
+            return fd; // Connection in progress
+        }
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
 ssize_t akari_tcp_recv(int fd, void *buf, size_t size) {
     while (1) {
         ssize_t received = recv(fd, buf, size, 0);
