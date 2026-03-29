@@ -1,0 +1,78 @@
+// std/http - HTTP server helpers on top of Akari runtime
+// include "src/lib/std/http.cipr";
+
+extern fn cipr_http_start(port: int): void;
+extern fn cipr_http_stop(): void;
+extern fn cipr_http_register(method: str, path: str, handler: fn(): void): void;
+extern fn cipr_http_method(): str;
+extern fn cipr_http_path(): str;
+extern fn cipr_http_body(): str;
+extern fn cipr_http_query(key: str, def: str): str;
+extern fn cipr_http_param(key: str, def: str): str;
+extern fn cipr_http_send(status: int, content_type: str, body: str): void;
+extern fn cipr_http_json(status: int, body: str): void;
+extern fn cipr_http_file(path: str): void;
+
+fn http_start(port: int): void {
+    cipr_http_start(port);
+}
+
+fn http_stop(): void {
+    cipr_http_stop();
+}
+
+fn http_method(): str {
+    return cipr_http_method();
+}
+
+fn http_path(): str {
+    return cipr_http_path();
+}
+
+fn http_body(): str {
+    return cipr_http_body();
+}
+
+fn http_get(path: str, handler: fn(): void): void {
+    cipr_http_register("GET", path, handler);
+}
+
+fn http_post(path: str, handler: fn(): void): void {
+    cipr_http_register("POST", path, handler);
+}
+
+fn http_put(path: str, handler: fn(): void): void {
+    cipr_http_register("PUT", path, handler);
+}
+
+fn http_delete(path: str, handler: fn(): void): void {
+    cipr_http_register("DELETE", path, handler);
+}
+
+fn http_query(key: str, def: str): str {
+    return cipr_http_query(key, def);
+}
+
+fn http_param(key: str, def: str): str {
+    return cipr_http_param(key, def);
+}
+
+fn http_send(status: int, content_type: str, body: str): void {
+    cipr_http_send(status, content_type, body);
+}
+
+fn http_json(status: int, body: str): void {
+    cipr_http_json(status, body);
+}
+
+fn http_file(path: str): void {
+    cipr_http_file(path);
+}
+
+fn http_ok(body: str): void {
+    http_send(200, "text/plain", body);
+}
+
+fn http_not_found(body: str): void {
+    http_send(404, "text/plain", body);
+}

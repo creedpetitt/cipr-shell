@@ -1,0 +1,38 @@
+// std/net - Low-level networking primitives
+// include "src/lib/std/net.cipr";
+
+extern fn cipr_net_listen(port: int, nonblocking: bool): int;
+extern fn cipr_net_accept(server_fd: int, nonblocking: bool): int;
+extern fn cipr_net_connect(host: str, port: int, nonblocking: bool): int;
+extern fn cipr_net_read(fd: int, max_bytes: int): str;
+extern fn cipr_net_write(fd: int, data: str): int;
+extern fn cipr_net_close(fd: int): void;
+extern fn cipr_net_peer_ip(fd: int): str;
+
+fn net_listen(port: int, nonblocking: bool): int {
+    return cipr_net_listen(port, nonblocking);
+}
+
+fn net_accept(server_fd: int, nonblocking: bool): int {
+    return cipr_net_accept(server_fd, nonblocking);
+}
+
+fn net_connect(host: str, port: int, nonblocking: bool): int {
+    return cipr_net_connect(host, port, nonblocking);
+}
+
+fn net_read(fd: int, max_bytes: int): str {
+    return cipr_net_read(fd, max_bytes);
+}
+
+fn net_write(fd: int, data: str): int {
+    return cipr_net_write(fd, data);
+}
+
+fn net_close(fd: int): void {
+    cipr_net_close(fd);
+}
+
+fn net_peer_ip(fd: int): str {
+    return cipr_net_peer_ip(fd);
+}

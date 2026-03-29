@@ -9,6 +9,11 @@ typedef struct {
     const char *data;
 } cipr_str_t;
 
+typedef struct {
+    void *fn_ptr;
+    void *env_ptr;
+} cipr_callable;
+
 // --- stdio ---
 void cipr_print_str(cipr_str_t str);
 void cipr_print_int(int64_t val);
@@ -43,5 +48,27 @@ int64_t    cipr_file_exists(cipr_str_t path);
 
 // --- io ---
 cipr_str_t cipr_readline(void);
+
+// --- net ---
+int64_t    cipr_net_listen(int64_t port, int64_t nonblocking);
+int64_t    cipr_net_accept(int64_t server_fd, int64_t nonblocking);
+int64_t    cipr_net_connect(cipr_str_t host, int64_t port, int64_t nonblocking);
+cipr_str_t cipr_net_read(int64_t fd, int64_t max_bytes);
+int64_t    cipr_net_write(int64_t fd, cipr_str_t data);
+void       cipr_net_close(int64_t fd);
+cipr_str_t cipr_net_peer_ip(int64_t fd);
+
+// --- http ---
+void       cipr_http_start(int64_t port);
+void       cipr_http_stop(void);
+void       cipr_http_register(cipr_str_t method, cipr_str_t path, cipr_callable handler);
+cipr_str_t cipr_http_method(void);
+cipr_str_t cipr_http_path(void);
+cipr_str_t cipr_http_body(void);
+cipr_str_t cipr_http_query(cipr_str_t key, cipr_str_t def);
+cipr_str_t cipr_http_param(cipr_str_t key, cipr_str_t def);
+void       cipr_http_send(int64_t status, cipr_str_t content_type, cipr_str_t body);
+void       cipr_http_json(int64_t status, cipr_str_t body);
+void       cipr_http_file(cipr_str_t path);
 
 #endif // CIPR_RUNTIME_H
