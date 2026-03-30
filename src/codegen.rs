@@ -1002,31 +1002,6 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     _ => Err(format!("Unsupported Float binary op: {:?}", op_type)),
                 }
             }
-            CiprType::Str => {
-                if op_type != TokenType::Plus {
-                    return Err(format!(
-                        "Strings only support '+' (concatenation), got operator: {:?}",
-                        op_type
-                    ));
-                }
-                let str_type = self.get_llvm_type(&CiprType::Str)?;
-                let str_struct = str_type.into_struct_type();
-                let fn_type = str_struct.fn_type(&[str_type.into(), str_type.into()], false);
-                let concat_fn = match self.module.get_function("cipr_str_concat") {
-                    Some(f) => f,
-                    None => self.module.add_function("cipr_str_concat", fn_type, None),
-                };
-                let result = self
-                    .builder
-                    .build_call(concat_fn, &[left.into(), right.into()], "concat_tmp")
-                    .map_err(|e| e.to_string())?;
-                match result.try_as_basic_value() {
-                    inkwell::values::ValueKind::Basic(v) => Ok(v),
-                    inkwell::values::ValueKind::Instruction(_) => {
-                        Err("cipr_str_concat returned void unexpectedly".to_string())
-                    }
-                }
-            }
             _ => Err("Can only do binary ops on Ints and Floats for now".to_string()),
         }
     }

@@ -397,9 +397,7 @@ impl<'a> TypeChecker<'a> {
 
         match op {
             TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                if left == CiprType::Str && op == TokenType::Plus {
-                    CiprType::Str
-                } else if left == CiprType::Int {
+                if left == CiprType::Int {
                     CiprType::Int
                 } else if left == CiprType::Float {
                     CiprType::Float
