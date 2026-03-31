@@ -24,6 +24,9 @@ void cipr_print_bool(int64_t val);
 void *cipr_malloc(int64_t size);
 void  cipr_free(void *ptr);
 
+// --- runtime errors ---
+void  cipr_runtime_oob(int64_t index, int64_t len);
+
 // --- time ---
 double cipr_time(void);
 
