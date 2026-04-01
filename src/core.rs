@@ -94,7 +94,26 @@ impl Core {
         out_bin: &str,
         build_mode: bool,
     ) -> Result<(), String> {
-        let obj_path = format!("{}.o", out_bin);
+        let temp_dir = if !build_mode {
+            Some(tempfile::tempdir().map_err(|e| format!("Failed to create temp dir: {}", e))?)
+        } else {
+            None
+        };
+
+        // If in build mode, we write directly to the target location.
+        // Otherwise, we write inside the temporary directory.
+        let (obj_path_str, out_bin_str) = if let Some(dir) = &temp_dir {
+            let base = dir.path().join(out_bin);
+            (
+                format!("{}.o", base.display()),
+                base.display().to_string(),
+            )
+        } else {
+            (
+                format!("{}.o", out_bin),
+                out_bin.to_string(),
+            )
+        };
 
         // Compile IR → object file via inkwell
         eprintln!("Compiling IR to object code...");
@@ -113,7 +132,7 @@ impl Core {
             .ok_or_else(|| "Failed to create target machine".to_string())?;
 
         target_machine
-            .write_to_file(module, inkwell::targets::FileType::Object, std::path::Path::new(&obj_path))
+            .write_to_file(module, inkwell::targets::FileType::Object, std::path::Path::new(&obj_path_str))
             .map_err(|e| e.to_string())?;
 
         // Compile runtime C modules (recursive) into object files
@@ -134,7 +153,12 @@ impl Core {
 
         let mut runtime_objects = Vec::new();
         for (i, c_file) in runtime_c_files.iter().enumerate() {
-            let runtime_obj = format!("{}.runtime.{}.o", out_bin, i);
+            let runtime_obj = if let Some(dir) = &temp_dir {
+                dir.path().join(format!("runtime.{}.o", i)).display().to_string()
+            } else {
+                format!("{}.runtime.{}.o", out_bin_str, i)
+            };
+
             let mut cc_args = vec!["-O3".to_string(), "-c".to_string()];
             cc_args.extend(runtime_include_args.iter().cloned());
             cc_args.extend(extra_cflags.iter().cloned());
@@ -157,9 +181,9 @@ impl Core {
 
         // Link Cipr object + runtime objects
         eprintln!("C Runtime Linked...");
-        let mut gcc_args = vec![obj_path.clone()];
+        let mut gcc_args = vec![obj_path_str.clone()];
         gcc_args.extend(runtime_objects.iter().cloned());
-        gcc_args.extend(["-o".to_string(), out_bin.to_string()]);
+        gcc_args.extend(["-o".to_string(), out_bin_str.clone()]);
         let gcc_ok = std::process::Command::new("gcc")
             .args(&gcc_args)
             .status()
@@ -168,21 +192,24 @@ impl Core {
             return Err("gcc linking failed!".to_string());
         }
 
-        // Run binary (unless --build mode), then clean up intermediates
+        // Run binary (unless --build mode)
         if !build_mode {
-            let run_ok = std::process::Command::new(format!("./{}", out_bin))
+            let run_ok = std::process::Command::new(&out_bin_str)
                 .status()
                 .map_err(|e| format!("Failed to run executable: {}", e))?;
+
             if !run_ok.success() {
                 return Err("Program execution failed.".to_string());
             }
-            let _ = std::fs::remove_file(&obj_path);
+            // Because temp_dir is an Option<TempDir>, as it goes out of scope here,
+            // the Drop trait is triggered and Rust will delete the folder and everything in it!
+        } else {
+            // Clean up the .o file in build mode since we don't have a TempDir to auto-delete it
+            let _ = std::fs::remove_file(&obj_path_str);
             for runtime_obj in runtime_objects {
                 let _ = std::fs::remove_file(runtime_obj);
             }
-            let _ = std::fs::remove_file(out_bin);
-        } else {
-            eprintln!("Build finished: ./{}", out_bin);
+            eprintln!("Build finished: ./{}", out_bin_str);
         }
 
         Ok(())
