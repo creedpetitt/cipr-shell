@@ -8,3 +8,4 @@ id-arena = "2"
 rand = "0.9"
 libc = "0.2"
 inkwell = { version = "0.8.0", features = ["llvm14-0"] }
+tempfile = "3.27.0"
