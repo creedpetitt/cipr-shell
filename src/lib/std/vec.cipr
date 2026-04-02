@@ -1,0 +1,59 @@
+// Dynamic Array of Integers
+struct IntVec {}
+
+extern fn cipr_int_vec_new(): @IntVec;
+extern fn cipr_int_vec_push(vec: @IntVec, val: int): void;
+extern fn cipr_int_vec_get(vec: @IntVec, idx: int): int;
+extern fn cipr_int_vec_set(vec: @IntVec, idx: int, val: int): void;
+extern fn cipr_int_vec_len(vec: @IntVec): int;
+extern fn cipr_int_vec_free(vec: @IntVec): void;
+
+fn int_vec_new(): @IntVec {
+    return cipr_int_vec_new();
+}
+
+fn int_vec_push(vec: @IntVec, val: int): void {
+    cipr_int_vec_push(vec, val);
+}
+
+fn int_vec_get(vec: @IntVec, idx: int): int {
+    return cipr_int_vec_get(vec, idx);
+}
+
+fn int_vec_set(vec: @IntVec, idx: int, val: int): void {
+    cipr_int_vec_set(vec, idx, val);
+}
+
+fn int_vec_len(vec: @IntVec): int {
+    return cipr_int_vec_len(vec);
+}
+
+// Dynamic Array of Strings
+struct StrVec {}
+
+extern fn cipr_str_vec_new(): @StrVec;
+extern fn cipr_str_vec_push(vec: @StrVec, val: str): void;
+extern fn cipr_str_vec_get(vec: @StrVec, idx: int): str;
+extern fn cipr_str_vec_set(vec: @StrVec, idx: int, val: str): void;
+extern fn cipr_str_vec_len(vec: @StrVec): int;
+extern fn cipr_str_vec_free(vec: @StrVec): void;
+
+fn str_vec_new(): @StrVec {
+    return cipr_str_vec_new();
+}
+
+fn str_vec_push(vec: @StrVec, val: str): void {
+    cipr_str_vec_push(vec, val);
+}
+
+fn str_vec_get(vec: @StrVec, idx: int): str {
+    return cipr_str_vec_get(vec, idx);
+}
+
+fn str_vec_set(vec: @StrVec, idx: int, val: str): void {
+    cipr_str_vec_set(vec, idx, val);
+}
+
+fn str_vec_len(vec: @StrVec): int {
+    return cipr_str_vec_len(vec);
+}

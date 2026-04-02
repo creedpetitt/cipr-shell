@@ -27,6 +27,35 @@ void  cipr_free(void *ptr);
 // --- runtime errors ---
 void  cipr_runtime_oob(int64_t index, int64_t len);
 
+// --- collections ---
+void* cipr_int_vec_new(void);
+void cipr_int_vec_push(void *vec, int64_t val);
+int64_t cipr_int_vec_get(void *vec, int64_t idx);
+void cipr_int_vec_set(void *vec, int64_t idx, int64_t val);
+int64_t cipr_int_vec_len(void *vec);
+void cipr_int_vec_free(void *vec);
+
+void* cipr_str_vec_new(void);
+void cipr_str_vec_push(void *vec, cipr_str_t val);
+cipr_str_t cipr_str_vec_get(void *vec, int64_t idx);
+void cipr_str_vec_set(void *vec, int64_t idx, cipr_str_t val);
+int64_t cipr_str_vec_len(void *vec);
+void cipr_str_vec_free(void *vec);
+
+void* cipr_str_int_map_new(void);
+void cipr_str_int_map_put(void *map, cipr_str_t key, int64_t val);
+int64_t cipr_str_int_map_get(void *map, cipr_str_t key);
+int64_t cipr_str_int_map_contains(void *map, cipr_str_t key);
+void cipr_str_int_map_remove(void *map, cipr_str_t key);
+void cipr_str_int_map_free(void *map);
+
+void* cipr_str_str_map_new(void);
+void cipr_str_str_map_put(void *map, cipr_str_t key, cipr_str_t val);
+cipr_str_t cipr_str_str_map_get(void *map, cipr_str_t key);
+int64_t cipr_str_str_map_contains(void *map, cipr_str_t key);
+void cipr_str_str_map_remove(void *map, cipr_str_t key);
+void cipr_str_str_map_free(void *map);
+
 // --- time ---
 double cipr_time(void);
 
