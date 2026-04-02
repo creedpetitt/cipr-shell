@@ -9,10 +9,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-static cipr_str_t cipr_empty_str(void) {
-    return (cipr_str_t){ .len = 0, .data = "" };
-}
-
 int64_t cipr_net_listen(int64_t port, int64_t nonblocking) {
     if (port <= 0 || port > 65535) {
         return -1;

@@ -31,6 +31,7 @@ void  cipr_runtime_oob(int64_t index, int64_t len);
 double cipr_time(void);
 
 // --- string ---
+cipr_str_t cipr_empty_str(void);
 int64_t    cipr_str_len(cipr_str_t s);
 cipr_str_t cipr_str_concat(cipr_str_t a, cipr_str_t b);
 int64_t    cipr_str_eq(cipr_str_t a, cipr_str_t b);

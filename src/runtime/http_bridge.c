@@ -18,10 +18,6 @@ typedef struct {
 static cipr_http_callback cipr_http_callbacks[CIPR_HTTP_MAX_CALLBACKS];
 static int cipr_http_callback_count = 0;
 
-static cipr_str_t cipr_empty_str(void) {
-    return (cipr_str_t){ .len = 0, .data = "" };
-}
-
 static char *cipr_alloc_cstr(const char *data, size_t len) {
     char *out = malloc(len + 1);
     if (!out) {

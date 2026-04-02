@@ -3,6 +3,12 @@
 #include <string.h>
 #include <stdio.h>
 
+cipr_str_t cipr_empty_str(void) {
+    char *buf = malloc(1);
+    buf[0] = '\0';
+    return (cipr_str_t){ .len = 0, .data = buf };
+}
+
 int64_t cipr_str_len(cipr_str_t s) {
     return s.len;
 }
@@ -23,7 +29,7 @@ int64_t cipr_str_eq(cipr_str_t a, cipr_str_t b) {
 cipr_str_t cipr_str_slice(cipr_str_t s, int64_t start, int64_t end) {
     if (start < 0) start = 0;
     if (end > s.len) end = s.len;
-    if (start >= end) return (cipr_str_t){ .len = 0, .data = "" };
+    if (start >= end) return cipr_empty_str();
     int64_t len = end - start;
     char *buf = malloc((size_t)len + 1);
     memcpy(buf, s.data + start, (size_t)len);

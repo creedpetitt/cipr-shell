@@ -7,7 +7,7 @@
 
 cipr_str_t cipr_fread_all(cipr_str_t path) {
     FILE *f = fopen(path.data, "r");
-    if (!f) return (cipr_str_t){ .len = 0, .data = "" };
+    if (!f) return cipr_empty_str();
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
