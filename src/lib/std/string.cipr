@@ -52,7 +52,3 @@ fn str_contains(s: str, sub: str): bool {
 fn str_starts_with(s: str, prefix: str): bool {
     return cipr_str_starts_with(s, prefix) != 0;
 }
-
-fn str_free(s: str): void {
-    cipr_str_free(s);
-}

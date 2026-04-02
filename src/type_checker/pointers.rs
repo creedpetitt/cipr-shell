@@ -131,14 +131,15 @@ impl<'a> TypeChecker<'a> {
         let child_id = self.arena[id].children[0].unwrap();
         let child_type = self.check(child_id);
 
-        if let CiprType::Pointer(_) = child_type {
-            CiprType::Void
-        } else {
-            self.error(
-                self.arena[id].token.line,
-                &format!("Cannot delete non-pointer type {:?}", child_type),
-            );
-            CiprType::Unknown
+        match child_type {
+            CiprType::Pointer(_) | CiprType::Str => CiprType::Void,
+            _ => {
+                self.error(
+                    self.arena[id].token.line,
+                    &format!("Cannot delete non-heap type {:?}", child_type),
+                );
+                CiprType::Unknown
+            }
         }
     }
 }

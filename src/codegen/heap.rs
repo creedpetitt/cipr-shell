@@ -1,6 +1,7 @@
-use crate::ast::NodeId;
+use crate::ast::{CiprType, NodeId};
 use crate::codegen::Codegen;
 use inkwell::values::BasicValueEnum;
+use inkwell::types::BasicType;
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
     pub(crate) fn visit_new(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
@@ -49,19 +50,42 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
     pub(crate) fn visit_delete(&mut self, id: NodeId) -> Result<(), String> {
         let child_id = self.arena[id].children[0].unwrap();
-        let val_ptr = self.evaluate(child_id)?.into_pointer_value();
+        let child_type = self.arena[child_id].resolved_type.clone();
+        let val = self.evaluate(child_id)?;
 
-        let raw_ptr = self
-            .builder
-            .build_pointer_cast(val_ptr, self.i8_ptr_type(), "delete_ptr_cast")
-            .unwrap();
+        let (ext_name, fn_type, arg) = match child_type {
+            CiprType::Str => {
+                let struct_type = self.get_llvm_type(&CiprType::Str)?;
+                let ftype = self.context.void_type().fn_type(&[struct_type.into()], false);
+                ("cipr_str_free", ftype, val.into())
+            }
+            CiprType::Pointer(inner) => {
+                let (fn_name, arg_val) = match *inner {
+                    CiprType::Struct(name) if name == "IntVec" => {
+                        ("cipr_int_vec_free", val.into())
+                    }
+                    CiprType::Struct(name) if name == "StrVec" => {
+                        ("cipr_str_vec_free", val.into())
+                    }
+                    CiprType::Struct(name) if name == "StrIntMap" => {
+                        ("cipr_str_int_map_free", val.into())
+                    }
+                    CiprType::Struct(name) if name == "StrStrMap" => {
+                        ("cipr_str_str_map_free", val.into())
+                    }
+                    _ => {
+                        let raw_ptr = self.builder.build_pointer_cast(val.into_pointer_value(), self.i8_ptr_type(), "delete_ptr_cast").unwrap();
+                        ("cipr_free", raw_ptr.into())
+                    }
+                };
+                let ftype = self.context.void_type().fn_type(&[self.i8_ptr_type().into()], false);
+                (fn_name, ftype, arg_val)
+            }
+            _ => return Err(format!("Cannot delete non-heap type: {:?}", child_type)),
+        };
 
-        // Auto-declare cipr_free if not yet in module (void cipr_free(i8*))
-        let fn_type = self.context.void_type().fn_type(&[self.i8_ptr_type().into()], false);
-        let free_fn = self.get_or_add_function("cipr_free", fn_type);
-        
-        self.builder
-            .build_call(free_fn, &[raw_ptr.into()], "free_call")
+        let free_fn = self.get_or_add_function(ext_name, fn_type);
+        self.builder.build_call(free_fn, &[arg], "")
             .map_err(|e| e.to_string())?;
 
         Ok(())
