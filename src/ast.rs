@@ -44,6 +44,7 @@ pub enum CiprType {
     Float,
     Str,
     Bool,
+    Null,
     Void,
     Array(Box<CiprType>),
     Callable(Vec<CiprType>, Box<CiprType>),
