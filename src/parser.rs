@@ -264,31 +264,33 @@ impl<'a> Parser<'a> {
         let mut children = Vec::new();
 
         if self.visited_files.insert(path_str.clone()) {
-            let source = std::fs::read_to_string(&path_str).unwrap_or_else(|_| {
-                println!(
-                    "[line {}] Error: Could not read included file: {}",
-                    path.line, path_str
-                );
-                "".to_string()
-            });
+            match std::fs::read_to_string(&path_str) {
+                Ok(source) => {
+                    let (tokens, scan_error) = crate::scanner::Scanner::new(&source).scan_tokens();
+                    if scan_error {
+                        self.error_at(&path, "Included file has scanner errors.");
+                    } else {
+                        let (root_id, sub_had_error) = {
+                            let mut sub_parser =
+                                Parser::new(&tokens, &mut *self.arena, &mut *self.visited_files);
+                            let root_id = sub_parser.parse();
+                            (root_id, sub_parser.had_error)
+                        };
 
-            if !source.is_empty() {
-                let (tokens, scan_error) = crate::scanner::Scanner::new(&source).scan_tokens();
-                if scan_error {
-                    println!(
-                        "[line {}] Error: Included file has scanner errors.",
-                        path.line
-                    );
-                } else {
-                    let root_id = {
-                        let mut sub_parser =
-                            Parser::new(&tokens, &mut *self.arena, &mut *self.visited_files);
-                        sub_parser.parse()
-                    };
+                        if sub_had_error {
+                            self.error_at(&path, "Included file has parser errors.");
+                        }
 
-                    if let Some(id) = root_id {
-                        children = self.arena[id].children.clone();
+                        if let Some(id) = root_id {
+                            children = self.arena[id].children.clone();
+                        }
                     }
+                }
+                Err(_) => {
+                    self.error_at(
+                        &path,
+                        &format!("Could not read included file '{}'.", path_str),
+                    );
                 }
             }
         }
