@@ -1,4 +1,5 @@
 use crate::ast::{alloc_node, alloc_node_typed, CiprType, NodeArena, NodeId, NodeType};
+use crate::diagnostics::{DiagnosticPhase, Diagnostics};
 use crate::token::{Token, TokenType, Value};
 use crate::type_syntax;
 use std::collections::HashSet;
@@ -9,6 +10,8 @@ pub struct Parser<'a> {
     current: usize,
     pub had_error: bool,
     visited_files: &'a mut HashSet<String>,
+    source_name: String,
+    diagnostics: Diagnostics,
 }
 
 impl<'a> Parser<'a> {
@@ -17,12 +20,23 @@ impl<'a> Parser<'a> {
         arena: &'a mut NodeArena,
         visited_files: &'a mut HashSet<String>,
     ) -> Self {
+        Self::new_with_source(tokens, arena, visited_files, "<source>")
+    }
+
+    pub fn new_with_source(
+        tokens: &'a [Token],
+        arena: &'a mut NodeArena,
+        visited_files: &'a mut HashSet<String>,
+        source_name: &str,
+    ) -> Self {
         Self {
             tokens,
             arena,
             current: 0,
             had_error: false,
             visited_files,
+            source_name: source_name.to_string(),
+            diagnostics: Diagnostics::new(),
         }
     }
 
@@ -45,6 +59,10 @@ impl<'a> Parser<'a> {
             Value::Null,
             statements,
         ))
+    }
+
+    pub fn take_diagnostics(&mut self) -> Diagnostics {
+        std::mem::take(&mut self.diagnostics)
     }
 
     // ── Declarations ──
@@ -266,15 +284,25 @@ impl<'a> Parser<'a> {
         if self.visited_files.insert(path_str.clone()) {
             match std::fs::read_to_string(&path_str) {
                 Ok(source) => {
-                    let (tokens, scan_error) = crate::scanner::Scanner::new(&source).scan_tokens();
+                    let (tokens, scan_error, scan_diags) =
+                        crate::scanner::Scanner::new_with_source(&source, &path_str)
+                            .scan_tokens_with_diagnostics();
+                    self.diagnostics.extend(scan_diags);
                     if scan_error {
                         self.error_at(&path, "Included file has scanner errors.");
                     } else {
                         let (root_id, sub_had_error) = {
-                            let mut sub_parser =
-                                Parser::new(&tokens, &mut *self.arena, &mut *self.visited_files);
+                            let mut sub_parser = Parser::new_with_source(
+                                &tokens,
+                                &mut *self.arena,
+                                &mut *self.visited_files,
+                                &path_str,
+                            );
                             let root_id = sub_parser.parse();
-                            (root_id, sub_parser.had_error)
+                            let sub_had_error = sub_parser.had_error;
+                            let sub_diags = sub_parser.take_diagnostics();
+                            self.diagnostics.extend(sub_diags);
+                            (root_id, sub_had_error)
                         };
 
                         if sub_had_error {
@@ -1026,9 +1054,12 @@ impl<'a> Parser<'a> {
     }
 
     fn error_at(&mut self, token: &Token, message: &str) {
-        eprintln!(
-            "[line {}] Error at '{}': {}",
-            token.line, token.lexeme, message
+        let detail = format!("Error at '{}': {}", token.lexeme, message);
+        self.diagnostics.emit_line(
+            DiagnosticPhase::Parse,
+            &self.source_name,
+            token.line,
+            &detail,
         );
         self.had_error = true;
     }

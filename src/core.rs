@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ast::NodeArena;
 use crate::codegen::Codegen;
+use crate::diagnostics::{DiagnosticPhase, Diagnostics};
 use crate::parser::Parser;
 use crate::scanner::Scanner;
 use crate::type_checker::TypeChecker;
@@ -39,32 +40,49 @@ impl Core {
             // The prelude is auto-injected
             let prelude_inject = "include \"src/lib/prelude.cipr\";\n";
             let full_source = format!("{}{}", prelude_inject, source);
-            self.run(&full_source, build_mode, out_path.to_str().unwrap_or("out"))
+            self.run(
+                &full_source,
+                build_mode,
+                out_path.to_str().unwrap_or("out"),
+                path,
+            )
         } else {
             Err("Unsupported file extension. Expected .cipr".to_string())
         }
     }
 
-    pub fn run(&mut self, source: &str, build_mode: bool, out_bin: &str) -> Result<(), String> {
-        let (tokens, scan_error) = Scanner::new(source).scan_tokens();
+    pub fn run(
+        &mut self,
+        source: &str,
+        build_mode: bool,
+        out_bin: &str,
+        source_name: &str,
+    ) -> Result<(), String> {
+        let mut diagnostics = Diagnostics::new();
+        let (tokens, scan_error, scan_diags) =
+            Scanner::new_with_source(source, source_name).scan_tokens_with_diagnostics();
+        diagnostics.extend(scan_diags);
 
         if scan_error {
-            return Err("Scanner errors occurred.".to_string());
+            return Err(diagnostics.render());
         }
 
         let mut visited_files = std::collections::HashSet::new();
-        let mut parser = Parser::new(&tokens, &mut self.arena, &mut visited_files);
+        let mut parser =
+            Parser::new_with_source(&tokens, &mut self.arena, &mut visited_files, source_name);
         let root = parser.parse();
+        diagnostics.extend(parser.take_diagnostics());
 
         if parser.had_error {
-            return Err("Parser errors occurred.".to_string());
+            return Err(diagnostics.render());
         }
 
         if let Some(root_id) = root {
-            let mut type_checker = TypeChecker::new(&mut self.arena);
+            let mut type_checker = TypeChecker::new_with_source(&mut self.arena, source_name);
             type_checker.check(root_id);
+            diagnostics.extend(type_checker.take_diagnostics());
             if type_checker.had_error {
-                return Err("Type Error occurred.".to_string());
+                return Err(diagnostics.render());
             }
             let context = inkwell::context::Context::create();
             let module = context.create_module("main");
@@ -72,12 +90,14 @@ impl Core {
 
             let mut codegen = Codegen::new(&context, &builder, &module, &self.arena);
             if let Err(e) = codegen.compile(root_id) {
-                return Err(format!("Codegen Error: {}", e));
+                diagnostics.emit(DiagnosticPhase::Codegen, source_name, &e);
+                return Err(diagnostics.render());
             }
 
             if let Err(e) = module.verify() {
                 let err_str: inkwell::support::LLVMString = e;
-                return Err(format!("LLVM Verification Error: {}", err_str.to_string()));
+                diagnostics.emit(DiagnosticPhase::Verify, source_name, &err_str.to_string());
+                return Err(diagnostics.render());
             }
 
             Self::link_and_emit(&module, out_bin, build_mode)?;
@@ -104,20 +124,17 @@ impl Core {
         // Otherwise, we write inside the temporary directory.
         let (obj_path_str, out_bin_str) = if let Some(dir) = &temp_dir {
             let base = dir.path().join(out_bin);
-            (
-                format!("{}.o", base.display()),
-                base.display().to_string(),
-            )
+            (format!("{}.o", base.display()), base.display().to_string())
         } else {
-            (
-                format!("{}.o", out_bin),
-                out_bin.to_string(),
-            )
+            (format!("{}.o", out_bin), out_bin.to_string())
         };
 
         // Compile IR → object file via inkwell
         eprintln!("Compiling IR to object code...");
-        inkwell::targets::Target::initialize_native(&inkwell::targets::InitializationConfig::default()).map_err(|e| e.to_string())?;
+        inkwell::targets::Target::initialize_native(
+            &inkwell::targets::InitializationConfig::default(),
+        )
+        .map_err(|e| e.to_string())?;
         let triple = inkwell::targets::TargetMachine::get_default_triple();
         let target = inkwell::targets::Target::from_triple(&triple).map_err(|e| e.to_string())?;
         let target_machine = target
@@ -132,7 +149,11 @@ impl Core {
             .ok_or_else(|| "Failed to create target machine".to_string())?;
 
         target_machine
-            .write_to_file(module, inkwell::targets::FileType::Object, std::path::Path::new(&obj_path_str))
+            .write_to_file(
+                module,
+                inkwell::targets::FileType::Object,
+                std::path::Path::new(&obj_path_str),
+            )
             .map_err(|e| e.to_string())?;
 
         // Compile runtime C modules (recursive) into object files
@@ -154,7 +175,10 @@ impl Core {
         let mut runtime_objects = Vec::new();
         for (i, c_file) in runtime_c_files.iter().enumerate() {
             let runtime_obj = if let Some(dir) = &temp_dir {
-                dir.path().join(format!("runtime.{}.o", i)).display().to_string()
+                dir.path()
+                    .join(format!("runtime.{}.o", i))
+                    .display()
+                    .to_string()
             } else {
                 format!("{}.runtime.{}.o", out_bin_str, i)
             };

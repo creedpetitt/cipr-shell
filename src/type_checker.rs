@@ -10,6 +10,7 @@ pub mod vars;
 use std::collections::HashMap;
 
 use crate::ast::{CiprType, NodeArena, NodeId, NodeType};
+use crate::diagnostics::{DiagnosticPhase, Diagnostics};
 use crate::type_syntax;
 use env::TypeEnv;
 
@@ -19,10 +20,16 @@ pub struct TypeChecker<'a> {
     pub had_error: bool,
     current_return_type: Option<CiprType>,
     pub structs: HashMap<String, Vec<(String, CiprType)>>,
+    source_name: String,
+    diagnostics: Diagnostics,
 }
 
 impl<'a> TypeChecker<'a> {
     pub fn new(arena: &'a mut NodeArena) -> Self {
+        Self::new_with_source(arena, "<source>")
+    }
+
+    pub fn new_with_source(arena: &'a mut NodeArena, source_name: &str) -> Self {
         let mut env = TypeEnv::new();
         env.define(
             "print",
@@ -35,11 +42,18 @@ impl<'a> TypeChecker<'a> {
             had_error: false,
             current_return_type: None,
             structs: HashMap::new(),
+            source_name: source_name.to_string(),
+            diagnostics: Diagnostics::new(),
         }
     }
 
+    pub fn take_diagnostics(&mut self) -> Diagnostics {
+        std::mem::take(&mut self.diagnostics)
+    }
+
     pub fn error(&mut self, line: usize, message: &str) {
-        eprintln!("[line {}] Type Error: {}", line, message);
+        self.diagnostics
+            .emit_line(DiagnosticPhase::Type, &self.source_name, line, message);
         self.had_error = true;
     }
 

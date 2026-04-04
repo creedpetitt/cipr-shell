@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::diagnostics::{DiagnosticPhase, Diagnostics};
 use crate::token::{Token, TokenType, Value};
 
 pub struct Scanner {
@@ -10,10 +11,16 @@ pub struct Scanner {
     current: usize,
     line: usize,
     pub had_error: bool,
+    source_name: String,
+    diagnostics: Diagnostics,
 }
 
 impl Scanner {
     pub fn new(source: &str) -> Self {
+        Self::new_with_source(source, "<source>")
+    }
+
+    pub fn new_with_source(source: &str, source_name: &str) -> Self {
         let mut keywords = HashMap::new();
         keywords.insert("and", TokenType::And);
         keywords.insert("else", TokenType::Else);
@@ -41,6 +48,8 @@ impl Scanner {
             current: 0,
             line: 1,
             had_error: false,
+            source_name: source_name.to_string(),
+            diagnostics: Diagnostics::new(),
         }
     }
 
@@ -59,6 +68,23 @@ impl Scanner {
 
         let had_error = self.had_error;
         (self.tokens, had_error)
+    }
+
+    pub fn scan_tokens_with_diagnostics(mut self) -> (Vec<Token>, bool, Diagnostics) {
+        while !self.is_at_end() {
+            self.start = self.current;
+            self.scan_token();
+        }
+
+        self.tokens.push(Token::new(
+            TokenType::EofToken,
+            String::new(),
+            Value::Null,
+            self.line,
+        ));
+
+        let had_error = self.had_error;
+        (self.tokens, had_error, self.diagnostics)
     }
 
     fn scan_token(&mut self) {
@@ -271,7 +297,8 @@ impl Scanner {
     }
 
     fn error(&mut self, message: &str) {
-        eprintln!("[line {}] Error: {}", self.line, message);
+        self.diagnostics
+            .emit_line(DiagnosticPhase::Scan, &self.source_name, self.line, message);
         self.had_error = true;
     }
 }
