@@ -11,10 +11,11 @@ impl<'a> TypeChecker<'a> {
         if target_node_type != NodeType::VarExpr
             && target_node_type != NodeType::Dereference
             && target_node_type != NodeType::IndexGet
+            && target_node_type != NodeType::GetField
         {
             self.error(
                 self.arena[id].token.line,
-                "Can only take the address of a variable, dereference, or array index.",
+                "Can only take the address of a variable, field access, dereference, or array index.",
             );
             return CiprType::Unknown;
         }

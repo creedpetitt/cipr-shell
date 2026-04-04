@@ -15,7 +15,11 @@ impl<'a> TypeChecker<'a> {
                     let field_node = &self.arena[*child_id];
                     Self::parse_type_annotation(&field_node.type_annotation)
                 };
-                self.validate_type(&field_type, self.arena[*child_id].token.line);
+                self.validate_value_type(
+                    &field_type,
+                    self.arena[*child_id].token.line,
+                    "Struct field type",
+                );
                 self.arena[*child_id].resolved_type = field_type.clone();
             }
         }

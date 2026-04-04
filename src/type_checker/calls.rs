@@ -61,7 +61,11 @@ impl<'a> TypeChecker<'a> {
         let children = self.arena[id].children.clone();
         let ret_ann = self.arena[id].type_annotation.clone();
         let ret_type = Self::parse_type_annotation(&ret_ann);
-        self.validate_type(&ret_type, self.arena[id].token.line);
+        self.validate_return_type(
+            &ret_type,
+            self.arena[id].token.line,
+            "Extern function return type",
+        );
 
         self.arena[id].resolved_type = ret_type.clone();
 
@@ -70,7 +74,11 @@ impl<'a> TypeChecker<'a> {
             if let Some(param_id) = child_opt {
                 let p_ann = self.arena[param_id].type_annotation.clone();
                 let p_type = Self::parse_type_annotation(&p_ann);
-                self.validate_type(&p_type, self.arena[param_id].token.line);
+                self.validate_value_type(
+                    &p_type,
+                    self.arena[param_id].token.line,
+                    "Extern function parameter type",
+                );
                 self.arena[param_id].resolved_type = p_type.clone();
                 param_types.push(p_type);
             }
@@ -85,7 +93,7 @@ impl<'a> TypeChecker<'a> {
         let name = self.arena[id].token.lexeme.clone();
         let annotation = self.arena[id].type_annotation.clone();
         let ret_type = Self::parse_type_annotation(&annotation);
-        self.validate_type(&ret_type, self.arena[id].token.line);
+        self.validate_return_type(&ret_type, self.arena[id].token.line, "Function return type");
 
         let children = self.arena[id].children.clone();
         let param_count = children.len() - 1;
@@ -95,7 +103,11 @@ impl<'a> TypeChecker<'a> {
             if let Some(param_id) = children[i] {
                 let p_ann = self.arena[param_id].type_annotation.clone();
                 let p_type = Self::parse_type_annotation(&p_ann);
-                self.validate_type(&p_type, self.arena[param_id].token.line);
+                self.validate_value_type(
+                    &p_type,
+                    self.arena[param_id].token.line,
+                    "Function parameter type",
+                );
                 param_types.push(p_type);
             }
         }

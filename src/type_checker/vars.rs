@@ -7,7 +7,7 @@ impl<'a> TypeChecker<'a> {
         let line = self.arena[id].token.line;
         let annotation = self.arena[id].type_annotation.clone();
         let declared_type = Self::parse_type_annotation(&annotation);
-        self.validate_type(&declared_type, line);
+        self.validate_value_type(&declared_type, line, "Variable type");
 
         let children = self.arena[id].children.clone();
         let init_type = self.check_child(children[0]);

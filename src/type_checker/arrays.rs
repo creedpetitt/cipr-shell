@@ -8,6 +8,10 @@ impl<'a> TypeChecker<'a> {
 
         for c in children.iter().flatten() {
             let t = self.check(*c);
+            if t == CiprType::Void {
+                self.error(self.arena[id].token.line, "Array elements cannot be void.");
+                continue;
+            }
             if elem_type == CiprType::Unknown {
                 elem_type = t;
             } else if t != CiprType::Unknown && t != elem_type {

@@ -117,6 +117,49 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    fn enforce_value_type_rules(&mut self, ty: &CiprType, line: usize, context: &str) {
+        match ty {
+            CiprType::Void => self.error(line, &format!("{} cannot be void.", context)),
+            CiprType::Array(inner) => {
+                self.enforce_value_type_rules(inner, line, "Array element type")
+            }
+            CiprType::Pointer(inner) => {
+                if **inner != CiprType::Void {
+                    self.enforce_value_type_rules(inner, line, "Pointer target type");
+                }
+            }
+            CiprType::Callable(params, ret) => {
+                for param in params {
+                    self.enforce_value_type_rules(param, line, "Function parameter type");
+                }
+                self.enforce_return_type_rules(ret, line, "Function return type");
+            }
+            CiprType::Int
+            | CiprType::Float
+            | CiprType::Str
+            | CiprType::Bool
+            | CiprType::Null
+            | CiprType::Struct(_)
+            | CiprType::Unknown => {}
+        }
+    }
+
+    fn enforce_return_type_rules(&mut self, ty: &CiprType, line: usize, context: &str) {
+        if *ty != CiprType::Void {
+            self.enforce_value_type_rules(ty, line, context);
+        }
+    }
+
+    pub(crate) fn validate_value_type(&mut self, ty: &CiprType, line: usize, context: &str) {
+        self.validate_type(ty, line);
+        self.enforce_value_type_rules(ty, line, context);
+    }
+
+    pub(crate) fn validate_return_type(&mut self, ty: &CiprType, line: usize, context: &str) {
+        self.validate_type(ty, line);
+        self.enforce_return_type_rules(ty, line, context);
+    }
+
     pub(crate) fn coerce_null_child(
         &mut self,
         child_opt: Option<NodeId>,
