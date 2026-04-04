@@ -73,6 +73,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     pub fn compile(&mut self, root_id: NodeId) -> Result<(), String> {
+        self.predeclare_structs_recursive(root_id)?;
+        let mut finalized = std::collections::HashSet::new();
+        self.finalize_structs_recursive(root_id, &mut finalized)?;
+
         let i32_type = self.context.i32_type();
         let fn_type = i32_type.fn_type(&[], false);
         let main_fn = self.module.add_function("main", fn_type, None);
@@ -92,6 +96,34 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             .build_return(Some(&zero))
             .map_err(|e| e.to_string())?;
 
+        Ok(())
+    }
+
+    fn predeclare_structs_recursive(&mut self, id: NodeId) -> Result<(), String> {
+        if self.arena[id].node_type == NodeType::StmtStructDecl {
+            self.predeclare_struct_decl(id)?;
+        }
+
+        let children = self.arena[id].children.clone();
+        for child_id in children.iter().flatten() {
+            self.predeclare_structs_recursive(*child_id)?;
+        }
+        Ok(())
+    }
+
+    fn finalize_structs_recursive(
+        &mut self,
+        id: NodeId,
+        finalized: &mut std::collections::HashSet<String>,
+    ) -> Result<(), String> {
+        if self.arena[id].node_type == NodeType::StmtStructDecl {
+            self.finalize_struct_decl(id, finalized)?;
+        }
+
+        let children = self.arena[id].children.clone();
+        for child_id in children.iter().flatten() {
+            self.finalize_structs_recursive(*child_id, finalized)?;
+        }
         Ok(())
     }
 

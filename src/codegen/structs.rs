@@ -1,8 +1,57 @@
 use crate::ast::{CiprType, NodeId};
 use crate::codegen::Codegen;
 use inkwell::values::BasicValueEnum;
+use std::collections::HashSet;
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
+    pub(crate) fn predeclare_struct_decl(&mut self, id: NodeId) -> Result<(), String> {
+        let name = self.arena[id].token.lexeme.clone();
+        if self.struct_types.contains_key(&name) {
+            return Ok(());
+        }
+
+        let field_names = self.arena[id]
+            .children
+            .iter()
+            .flatten()
+            .map(|child_id| self.arena[*child_id].token.lexeme.clone())
+            .collect();
+
+        let struct_type = self.context.opaque_struct_type(&name);
+        self.struct_types.insert(name, (struct_type, field_names));
+        Ok(())
+    }
+
+    pub(crate) fn finalize_struct_decl(
+        &mut self,
+        id: NodeId,
+        finalized: &mut HashSet<String>,
+    ) -> Result<(), String> {
+        let name = self.arena[id].token.lexeme.clone();
+        if finalized.contains(&name) {
+            return Ok(());
+        }
+
+        self.predeclare_struct_decl(id)?;
+
+        let mut field_types = Vec::new();
+        for child_opt in &self.arena[id].children {
+            if let Some(child_id) = child_opt {
+                let field_type = self.arena[*child_id].resolved_type.clone();
+                let llvm_type = self.get_llvm_type(&field_type)?;
+                field_types.push(llvm_type);
+            }
+        }
+
+        let (struct_type, _) = self
+            .struct_types
+            .get(&name)
+            .ok_or_else(|| format!("Unknown struct '{}'", name))?;
+        struct_type.set_body(&field_types, false);
+        finalized.insert(name);
+        Ok(())
+    }
+
     pub(crate) fn get_struct_field_index(
         &self,
         struct_name: &str,
@@ -25,21 +74,14 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
     pub(crate) fn visit_struct_decl(&mut self, id: NodeId) -> Result<(), String> {
         let name = self.arena[id].token.lexeme.clone();
-        let mut field_names = Vec::new();
-        let mut field_types = Vec::new();
-        for child_opt in &self.arena[id].children {
-            if let Some(child_id) = child_opt {
-                let field_node = &self.arena[*child_id];
-                let field_name = field_node.token.lexeme.clone();
-                field_names.push(field_name);
-                let field_type = field_node.resolved_type.clone();
-                let llvm_type = self.get_llvm_type(&field_type)?;
-                field_types.push(llvm_type.into());
-            }
+        if self.struct_types.contains_key(&name) {
+            Ok(())
+        } else {
+            Err(format!(
+                "Struct '{}' was not prepared before declaration execution",
+                name
+            ))
         }
-        let struct_type = self.context.struct_type(&field_types, false);
-        self.struct_types.insert(name, (struct_type, field_names));
-        Ok(())
     }
 
     pub(crate) fn visit_struct_init(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
