@@ -45,7 +45,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     pub fn i8_ptr_type(&self) -> inkwell::types::PointerType<'ctx> {
-        self.context.i8_type().ptr_type(inkwell::AddressSpace::from(0))
+        self.context
+            .i8_type()
+            .ptr_type(inkwell::AddressSpace::from(0))
     }
 
     pub fn current_function(&self) -> Result<inkwell::values::FunctionValue<'ctx>, String> {
@@ -63,7 +65,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     ) -> inkwell::values::FunctionValue<'ctx> {
         match self.module.get_function(name) {
             Some(f) => f,
-            None => self.module.add_function(name, fn_type, Some(inkwell::module::Linkage::External)),
+            None => {
+                self.module
+                    .add_function(name, fn_type, Some(inkwell::module::Linkage::External))
+            }
         }
     }
 
@@ -90,6 +95,13 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         Ok(())
     }
 
+    fn is_current_block_terminated(&self) -> bool {
+        self.builder
+            .get_insert_block()
+            .and_then(|bb| bb.get_terminator())
+            .is_some()
+    }
+
     pub fn execute(&mut self, id: NodeId) -> Result<(), String> {
         let node_type = self.arena[id].node_type;
 
@@ -99,6 +111,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let children = self.arena[id].children.clone();
                 for c in children.iter().flatten() {
                     self.execute(*c)?;
+                    if self.is_current_block_terminated() {
+                        break;
+                    }
                 }
                 self.symbol_table.exit_scope();
                 Ok(())
@@ -107,6 +122,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 let children = self.arena[id].children.clone();
                 for c in children.iter().flatten() {
                     self.execute(*c)?;
+                    if self.is_current_block_terminated() {
+                        break;
+                    }
                 }
                 Ok(())
             }

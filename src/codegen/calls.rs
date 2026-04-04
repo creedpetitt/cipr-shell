@@ -9,7 +9,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let callee_id = children[0].expect("Call missing callee");
         let callee_name = self.arena[callee_id].token.lexeme.clone();
 
-        if self.arena[callee_id].node_type == crate::ast::NodeType::VarExpr && callee_name == "print" {
+        if self.arena[callee_id].node_type == crate::ast::NodeType::VarExpr
+            && callee_name == "print"
+        {
             let arg_id = children[1].expect("Print missing argument");
             return self.emit_print_call(arg_id);
         }
@@ -79,7 +81,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         }
     }
 
-    pub(crate) fn emit_print_call(&mut self, arg_id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+    pub(crate) fn emit_print_call(
+        &mut self,
+        arg_id: NodeId,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         let arg_val = self.evaluate(arg_id)?;
         let arg_type = &self.arena[arg_id].resolved_type;
 

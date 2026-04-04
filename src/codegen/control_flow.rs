@@ -13,18 +13,29 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let parent_fn = self.current_function()?;
 
         let then_bb = self.context.append_basic_block(parent_fn, "then");
-        let else_bb = self.context.append_basic_block(parent_fn, "else");
-        let merge_bb = self.context.append_basic_block(parent_fn, "ifcont");
 
         let has_else = children.get(2).and_then(|x| *x).is_some();
 
-        if has_else {
-            self.builder
-                .build_conditional_branch(cond_val, then_bb, else_bb)
-                .map_err(|e| e.to_string())?;
+        let else_bb = if has_else {
+            Some(self.context.append_basic_block(parent_fn, "else"))
         } else {
+            None
+        };
+
+        let no_else_merge_bb = if has_else {
+            None
+        } else {
+            Some(self.context.append_basic_block(parent_fn, "ifcont"))
+        };
+
+        if let Some(merge_bb) = no_else_merge_bb {
             self.builder
                 .build_conditional_branch(cond_val, then_bb, merge_bb)
+                .map_err(|e| e.to_string())?;
+        } else {
+            let else_bb = else_bb.ok_or("Missing else block")?;
+            self.builder
+                .build_conditional_branch(cond_val, then_bb, else_bb)
                 .map_err(|e| e.to_string())?;
         }
 
@@ -33,36 +44,48 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         if let Some(then_id) = children[1] {
             self.execute(then_id)?;
         }
-        if self
-            .builder
-            .get_insert_block()
-            .and_then(|bb| bb.get_terminator())
-            .is_none()
-        {
-            self.builder
-                .build_unconditional_branch(merge_bb)
-                .map_err(|e| e.to_string())?;
+        let then_end_bb = self.builder.get_insert_block().ok_or("No insert block")?;
+        let then_has_terminator = then_end_bb.get_terminator().is_some();
+
+        if !has_else {
+            if !then_has_terminator {
+                let merge_bb = no_else_merge_bb.ok_or("Missing if merge block")?;
+                self.builder
+                    .build_unconditional_branch(merge_bb)
+                    .map_err(|e| e.to_string())?;
+            }
+            let merge_bb = no_else_merge_bb.ok_or("Missing if merge block")?;
+            self.builder.position_at_end(merge_bb);
+            return Ok(());
         }
 
         // Else block
+        let else_bb = else_bb.ok_or("Missing else block")?;
         self.builder.position_at_end(else_bb);
-        if has_else {
-            if let Some(else_id) = children[2] {
-                self.execute(else_id)?;
-            }
+        if let Some(else_id) = children[2] {
+            self.execute(else_id)?;
         }
-        if self
-            .builder
-            .get_insert_block()
-            .and_then(|bb| bb.get_terminator())
-            .is_none()
-        {
+        let else_end_bb = self.builder.get_insert_block().ok_or("No insert block")?;
+        let else_has_terminator = else_end_bb.get_terminator().is_some();
+
+        if then_has_terminator && else_has_terminator {
+            return Ok(());
+        }
+
+        let merge_bb = self.context.append_basic_block(parent_fn, "ifcont");
+        if !then_has_terminator {
+            self.builder.position_at_end(then_end_bb);
+            self.builder
+                .build_unconditional_branch(merge_bb)
+                .map_err(|e| e.to_string())?;
+        }
+        if !else_has_terminator {
+            self.builder.position_at_end(else_end_bb);
             self.builder
                 .build_unconditional_branch(merge_bb)
                 .map_err(|e| e.to_string())?;
         }
 
-        // Continue after if/else
         self.builder.position_at_end(merge_bb);
         Ok(())
     }

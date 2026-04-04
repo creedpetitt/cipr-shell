@@ -1,7 +1,7 @@
 use crate::ast::{CiprType, NodeId};
 use crate::codegen::Codegen;
-use inkwell::values::BasicValueEnum;
 use inkwell::types::BasicType;
+use inkwell::values::BasicValueEnum;
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
     pub(crate) fn ensure_runtime_oob_function(&self) -> inkwell::values::FunctionValue<'ctx> {

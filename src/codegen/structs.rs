@@ -3,7 +3,11 @@ use crate::codegen::Codegen;
 use inkwell::values::BasicValueEnum;
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
-    pub(crate) fn get_struct_field_index(&self, struct_name: &str, field_name: &str) -> Result<u32, String> {
+    pub(crate) fn get_struct_field_index(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+    ) -> Result<u32, String> {
         let (_, fields) = self
             .struct_types
             .get(struct_name)
@@ -45,13 +49,18 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             _ => return Err("StructInit resolved to non-struct type".to_string()),
         };
 
-        let (struct_type, _) = self.struct_types.get(&struct_name).unwrap();
+        let (struct_type, _) = self
+            .struct_types
+            .get(&struct_name)
+            .ok_or_else(|| format!("Unknown struct '{}'", struct_name))?;
         let mut struct_val = struct_type.const_zero();
 
         for (i, child_opt) in self.arena[id].children.iter().enumerate() {
-            let child_id = child_opt.unwrap();
+            let child_id = child_opt
+                .ok_or_else(|| "Struct initializer missing field assignment node".to_string())?;
             let assign_node = &self.arena[child_id];
-            let val_id = assign_node.children[0].unwrap();
+            let val_id = assign_node.children[0]
+                .ok_or_else(|| "Struct field initializer missing value".to_string())?;
             let val = self.evaluate(val_id)?;
             struct_val = self
                 .builder
@@ -64,7 +73,8 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     pub(crate) fn visit_get_field(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
-        let target_id = self.arena[id].children[0].unwrap();
+        let target_id =
+            self.arena[id].children[0].ok_or_else(|| "GetField missing target".to_string())?;
         let target_type = self.arena[target_id].resolved_type.clone();
         let field_name = self.arena[id].token.lexeme.clone();
 
@@ -102,9 +112,14 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         }
     }
 
-    pub(crate) fn visit_assign_field(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
-        let target_expr_id = self.arena[id].children[0].unwrap();
-        let val_expr_id = self.arena[id].children[1].unwrap();
+    pub(crate) fn visit_assign_field(
+        &mut self,
+        id: NodeId,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let target_expr_id =
+            self.arena[id].children[0].ok_or_else(|| "AssignField missing target".to_string())?;
+        let val_expr_id =
+            self.arena[id].children[1].ok_or_else(|| "AssignField missing value".to_string())?;
 
         let target_type = self.arena[target_expr_id].resolved_type.clone();
         let field_name = self.arena[id].token.lexeme.clone();

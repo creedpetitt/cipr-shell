@@ -17,11 +17,13 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
             }
             NodeType::Dereference => {
-                let inner_id = self.arena[id].children[0].unwrap();
+                let inner_id = self.arena[id].children[0]
+                    .ok_or_else(|| "Dereference missing operand".to_string())?;
                 Ok(self.evaluate(inner_id)?.into_pointer_value())
             }
             NodeType::GetField => {
-                let target_id = self.arena[id].children[0].unwrap();
+                let target_id = self.arena[id].children[0]
+                    .ok_or_else(|| "GetField missing target".to_string())?;
                 let field_name = self.arena[id].token.lexeme.clone();
                 let target_type = self.arena[target_id].resolved_type.clone();
                 let mut is_ptr = false;
@@ -51,8 +53,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 Ok(field_ptr)
             }
             NodeType::IndexGet => {
-                let arr_id = self.arena[id].children[0].unwrap();
-                let index_id = self.arena[id].children[1].unwrap();
+                let arr_id = self.arena[id].children[0]
+                    .ok_or_else(|| "IndexGet missing array target".to_string())?;
+                let index_id = self.arena[id].children[1]
+                    .ok_or_else(|| "IndexGet missing index operand".to_string())?;
                 self.get_checked_array_element_ptr(arr_id, index_id, "idx_gep")
             }
             _ => Err("Cannot take pointer to ephemeral expression".to_string()),
@@ -60,7 +64,8 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     }
 
     pub(crate) fn visit_addressof(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
-        let target_id = self.arena[id].children[0].unwrap();
+        let target_id =
+            self.arena[id].children[0].ok_or_else(|| "AddressOf missing target".to_string())?;
         Ok(self.get_eval_pointer(target_id)?.into())
     }
 
@@ -74,7 +79,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             .map_err(|e| e.to_string())?)
     }
 
-    pub(crate) fn visit_assign_deref(&mut self, id: NodeId) -> Result<BasicValueEnum<'ctx>, String> {
+    pub(crate) fn visit_assign_deref(
+        &mut self,
+        id: NodeId,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         let children = self.arena[id].children.clone();
         let ptr_expr_id = children[0].expect("AssignDeref missing target");
         let val_expr_id = children[1].expect("AssignDeref missing value");
