@@ -58,15 +58,19 @@ impl<'a> TypeChecker<'a> {
     pub(crate) fn predeclare_structs(&mut self, children: &[Option<NodeId>]) {
         for child in children.iter().flatten() {
             if self.arena[*child].node_type == NodeType::StmtStructDecl {
-                self.register_struct_decl(*child);
+                if !self.register_struct_decl(*child) {
+                    let name = self.arena[*child].token.lexeme.clone();
+                    let line = self.arena[*child].token.line;
+                    self.error(line, &format!("Duplicate struct declaration '{}'.", name));
+                }
             }
         }
     }
 
-    pub(crate) fn register_struct_decl(&mut self, id: NodeId) {
+    pub(crate) fn register_struct_decl(&mut self, id: NodeId) -> bool {
         let name = self.arena[id].token.lexeme.clone();
         if self.structs.contains_key(&name) {
-            return;
+            return false;
         }
 
         let mut fields = Vec::new();
@@ -80,11 +84,18 @@ impl<'a> TypeChecker<'a> {
             }
         }
         self.structs.insert(name, fields);
+        true
     }
 
     pub(crate) fn validate_type(&mut self, ty: &CiprType, line: usize) {
         match ty {
-            CiprType::Array(inner) | CiprType::Pointer(inner) => self.validate_type(inner, line),
+            CiprType::Array(inner) => self.validate_type(inner, line),
+            CiprType::Pointer(inner) => {
+                if **inner == CiprType::Void {
+                    self.error(line, "Pointers to void are not supported.");
+                }
+                self.validate_type(inner, line);
+            }
             CiprType::Callable(params, ret) => {
                 for param in params {
                     self.validate_type(param, line);

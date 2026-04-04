@@ -4,7 +4,9 @@ use crate::type_checker::TypeChecker;
 impl<'a> TypeChecker<'a> {
     pub(crate) fn check_struct_decl(&mut self, id: NodeId) -> CiprType {
         let name = self.arena[id].token.lexeme.clone();
-        self.register_struct_decl(id);
+        if !self.structs.contains_key(&name) {
+            let _ = self.register_struct_decl(id);
+        }
 
         let children = self.arena[id].children.clone();
         for child_opt in &children {
