@@ -72,6 +72,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 Ok((*struct_type).into())
             }
             CiprType::Callable(_, _) => Ok(self.callable_llvm_type().into()),
+            CiprType::Null => Err("Null is not a first-class value type".to_string()),
             CiprType::Void => Err("Void is not a first-class value type".to_string()),
             CiprType::Unknown => Err("Type was not resolved before code generation".to_string()),
         }

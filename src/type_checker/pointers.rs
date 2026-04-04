@@ -60,9 +60,15 @@ impl<'a> TypeChecker<'a> {
             }
         };
 
-        if expected_type != CiprType::Unknown
+        if val_type == CiprType::Null && !self.coerce_null_child(Some(val_expr_id), &expected_type)
+        {
+            self.error(
+                self.arena[id].token.line,
+                "Null can only be assigned through pointers to pointer-typed values.",
+            );
+        } else if expected_type != CiprType::Unknown
             && val_type != CiprType::Unknown
-            && expected_type != val_type
+            && !self.types_match(&expected_type, &val_type)
         {
             self.error(
                 self.arena[id].token.line,
@@ -110,9 +116,18 @@ impl<'a> TypeChecker<'a> {
             let val_type = self.check(child_id);
             let (expected_name, expected_type) = &struct_fields[i];
 
-            if expected_type != &CiprType::Unknown
+            if val_type == CiprType::Null && !self.coerce_null_child(Some(child_id), expected_type)
+            {
+                self.error(
+                    self.arena[id].token.line,
+                    &format!(
+                        "'new {}' argument {} ({}) can only use null for pointer-typed fields",
+                        struct_name, i, expected_name
+                    ),
+                );
+            } else if expected_type != &CiprType::Unknown
                 && val_type != CiprType::Unknown
-                && expected_type != &val_type
+                && !self.types_match(expected_type, &val_type)
             {
                 self.error(
                     self.arena[id].token.line,

@@ -1,7 +1,7 @@
 use crate::ast::{CiprType, NodeId};
 use crate::codegen::Codegen;
 use crate::token::{TokenType, Value};
-use inkwell::types::BasicMetadataTypeEnum;
+use inkwell::types::{BasicMetadataTypeEnum, BasicType};
 use inkwell::values::BasicValueEnum;
 
 impl<'a, 'ctx> Codegen<'a, 'ctx> {
@@ -165,10 +165,19 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
                 Ok(struct_val.into())
             }
-            _ => Err(format!(
-                "Unsupported literal type in Codegen: {:?}",
-                self.arena[id].value
-            )),
+            Value::Null => match &self.arena[id].resolved_type {
+                CiprType::Pointer(inner) => {
+                    let inner_type = self.get_llvm_type(inner)?;
+                    Ok(inner_type
+                        .ptr_type(inkwell::AddressSpace::from(0))
+                        .const_null()
+                        .into())
+                }
+                other => Err(format!(
+                    "Null literal must resolve to a pointer type before code generation, got {:?}",
+                    other
+                )),
+            },
         }
     }
 
@@ -329,7 +338,60 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     _ => Err(format!("Unsupported Float binary op: {:?}", op_type)),
                 }
             }
-            _ => Err("Can only do binary ops on Ints and Floats for now".to_string()),
+            CiprType::Bool => {
+                let left_bool = left.into_int_value();
+                let right_bool = right.into_int_value();
+                match op_type {
+                    TokenType::EqualEqual => Ok(self
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            left_bool,
+                            right_bool,
+                            "beqtmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::BangEqual => Ok(self
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            left_bool,
+                            right_bool,
+                            "bnetmp",
+                        )
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    _ => Err(format!("Unsupported Bool binary op: {:?}", op_type)),
+                }
+            }
+            CiprType::Pointer(_) => {
+                let left_ptr = left.into_pointer_value();
+                let right_ptr = right.into_pointer_value();
+                let intptr_type = self.context.i64_type();
+                let left_int = self
+                    .builder
+                    .build_ptr_to_int(left_ptr, intptr_type, "ptrcmp_left")
+                    .map_err(|e| e.to_string())?;
+                let right_int = self
+                    .builder
+                    .build_ptr_to_int(right_ptr, intptr_type, "ptrcmp_right")
+                    .map_err(|e| e.to_string())?;
+                match op_type {
+                    TokenType::EqualEqual => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::EQ, left_int, right_int, "peqtmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    TokenType::BangEqual => Ok(self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::NE, left_int, right_int, "pnetmp")
+                        .map_err(|e| e.to_string())?
+                        .into()),
+                    _ => Err(format!("Unsupported Pointer binary op: {:?}", op_type)),
+                }
+            }
+            _ => Err("Unsupported operand type for binary operation".to_string()),
         }
     }
 

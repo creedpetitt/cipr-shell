@@ -17,7 +17,7 @@ impl<'a> TypeChecker<'a> {
             Value::Float(_) => CiprType::Float,
             Value::Str(_) => CiprType::Str,
             Value::Bool(_) => CiprType::Bool,
-            Value::Null => CiprType::Unknown, // Null matches anything for now
+            Value::Null => CiprType::Null,
         }
     }
 
@@ -29,38 +29,89 @@ impl<'a> TypeChecker<'a> {
         let left = self.check_child(children[0]);
         let right = self.check_child(children[1]);
 
-        if left != CiprType::Unknown && right != CiprType::Unknown && left != right {
-            self.error(
-                line,
-                &format!(
-                    "Type mismatch in binary operation: {:?} and {:?}",
-                    left, right
-                ),
-            );
-        }
-
         match op {
             TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                if left == CiprType::Int {
-                    CiprType::Int
-                } else if left == CiprType::Float {
-                    CiprType::Float
-                } else {
-                    if left != CiprType::Unknown {
+                match (&left, &right) {
+                    (CiprType::Int, CiprType::Int) => CiprType::Int,
+                    (CiprType::Float, CiprType::Float) => CiprType::Float,
+                    (CiprType::Unknown, _) | (_, CiprType::Unknown) => CiprType::Unknown,
+                    _ => {
                         self.error(
                             line,
-                            &format!("Invalid operands for arithmetic: {:?}", left),
+                            &format!(
+                                "Arithmetic operators require matching Int or Float operands, got {:?} and {:?}",
+                                left, right
+                            ),
                         );
+                        CiprType::Unknown
                     }
-                    CiprType::Unknown
                 }
             }
             TokenType::Greater
             | TokenType::GreaterEqual
             | TokenType::Less
-            | TokenType::LessEqual
-            | TokenType::EqualEqual
-            | TokenType::BangEqual => CiprType::Bool,
+            | TokenType::LessEqual => match (&left, &right) {
+                (CiprType::Int, CiprType::Int) | (CiprType::Float, CiprType::Float) => {
+                    CiprType::Bool
+                }
+                (CiprType::Unknown, _) | (_, CiprType::Unknown) => CiprType::Bool,
+                _ => {
+                    self.error(
+                            line,
+                            &format!(
+                                "Ordering comparisons require matching Int or Float operands, got {:?} and {:?}",
+                                left, right
+                            ),
+                        );
+                    CiprType::Unknown
+                }
+            },
+            TokenType::EqualEqual | TokenType::BangEqual => {
+                if left == CiprType::Null && right == CiprType::Null {
+                    self.error(line, "Cannot compare two untyped null values.");
+                    return CiprType::Unknown;
+                }
+
+                if left == CiprType::Null && matches!(right, CiprType::Pointer(_)) {
+                    self.coerce_null_child(children[0], &right);
+                    return CiprType::Bool;
+                }
+                if right == CiprType::Null && matches!(left, CiprType::Pointer(_)) {
+                    self.coerce_null_child(children[1], &left);
+                    return CiprType::Bool;
+                }
+
+                match (&left, &right) {
+                    (CiprType::Int, CiprType::Int)
+                    | (CiprType::Float, CiprType::Float)
+                    | (CiprType::Bool, CiprType::Bool)
+                    | (CiprType::Pointer(_), CiprType::Pointer(_)) => {
+                        if left == right {
+                            CiprType::Bool
+                        } else {
+                            self.error(
+                                line,
+                                &format!(
+                                    "Equality comparisons require matching operand types, got {:?} and {:?}",
+                                    left, right
+                                ),
+                            );
+                            CiprType::Unknown
+                        }
+                    }
+                    (CiprType::Unknown, _) | (_, CiprType::Unknown) => CiprType::Bool,
+                    _ => {
+                        self.error(
+                            line,
+                            &format!(
+                                "Equality comparisons are only supported for Int, Float, Bool, and Pointer operands, got {:?} and {:?}",
+                                left, right
+                            ),
+                        );
+                        CiprType::Unknown
+                    }
+                }
+            }
             _ => CiprType::Unknown,
         }
     }
@@ -77,18 +128,43 @@ impl<'a> TypeChecker<'a> {
                 if right != CiprType::Int && right != CiprType::Float && right != CiprType::Unknown
                 {
                     self.error(line, "Operand must be Int or Float.");
+                    CiprType::Unknown
+                } else {
+                    right
                 }
-                right
             }
-            TokenType::Bang => CiprType::Bool,
+            TokenType::Bang => {
+                if right != CiprType::Bool && right != CiprType::Unknown {
+                    self.error(line, "Operand of '!' must be Bool.");
+                    CiprType::Unknown
+                } else {
+                    CiprType::Bool
+                }
+            }
             _ => CiprType::Unknown,
         }
     }
 
     pub(crate) fn check_logical(&mut self, id: NodeId) -> CiprType {
         let children = self.arena[id].children.clone();
-        self.check_child(children[0]);
-        self.check_child(children[1]);
-        CiprType::Bool
+        let line = self.arena[id].token.line;
+        let left = self.check_child(children[0]);
+        let right = self.check_child(children[1]);
+
+        let left_ok = left == CiprType::Bool || left == CiprType::Unknown;
+        let right_ok = right == CiprType::Bool || right == CiprType::Unknown;
+
+        if !left_ok || !right_ok {
+            self.error(
+                line,
+                &format!(
+                    "Logical operators require Bool operands, got {:?} and {:?}",
+                    left, right
+                ),
+            );
+            CiprType::Unknown
+        } else {
+            CiprType::Bool
+        }
     }
 }

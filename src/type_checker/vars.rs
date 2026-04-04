@@ -7,12 +7,17 @@ impl<'a> TypeChecker<'a> {
         let line = self.arena[id].token.line;
         let annotation = self.arena[id].type_annotation.clone();
         let declared_type = Self::parse_type_annotation(&annotation);
+        self.validate_type(&declared_type, line);
 
         let children = self.arena[id].children.clone();
         let init_type = self.check_child(children[0]);
 
         let final_type = if declared_type != CiprType::Unknown {
-            if init_type != CiprType::Unknown && init_type != declared_type {
+            if init_type == CiprType::Null && !self.coerce_null_child(children[0], &declared_type) {
+                self.error(line, "Null can only be assigned to pointer types.");
+            } else if !self.types_match(&declared_type, &init_type)
+                && init_type != CiprType::Unknown
+            {
                 self.error(
                     line,
                     &format!(
@@ -22,6 +27,12 @@ impl<'a> TypeChecker<'a> {
                 );
             }
             declared_type
+        } else if init_type == CiprType::Null {
+            self.error(
+                line,
+                "Variables initialized with null must have an explicit pointer type annotation.",
+            );
+            CiprType::Unknown
         } else if init_type != CiprType::Unknown {
             init_type
         } else {
@@ -45,10 +56,9 @@ impl<'a> TypeChecker<'a> {
 
         let var_type_opt = self.env.get(&name);
         if let Some(var_type) = var_type_opt {
-            if var_type != CiprType::Unknown
-                && val_type != CiprType::Unknown
-                && var_type != val_type
-            {
+            if val_type == CiprType::Null && !self.coerce_null_child(children[0], &var_type) {
+                self.error(line, "Null can only be assigned to pointer types.");
+            } else if !self.types_match(&var_type, &val_type) && val_type != CiprType::Unknown {
                 self.error(
                     line,
                     &format!(

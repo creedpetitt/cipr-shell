@@ -55,6 +55,90 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    pub(crate) fn predeclare_structs(&mut self, children: &[Option<NodeId>]) {
+        for child in children.iter().flatten() {
+            if self.arena[*child].node_type == NodeType::StmtStructDecl {
+                self.register_struct_decl(*child);
+            }
+        }
+    }
+
+    pub(crate) fn register_struct_decl(&mut self, id: NodeId) {
+        let name = self.arena[id].token.lexeme.clone();
+        if self.structs.contains_key(&name) {
+            return;
+        }
+
+        let mut fields = Vec::new();
+        let children = self.arena[id].children.clone();
+        for child_opt in &children {
+            if let Some(child_id) = child_opt {
+                let field_node = &self.arena[*child_id];
+                let field_name = field_node.token.lexeme.clone();
+                let field_type = Self::parse_type_annotation(&field_node.type_annotation);
+                fields.push((field_name, field_type));
+            }
+        }
+        self.structs.insert(name, fields);
+    }
+
+    pub(crate) fn validate_type(&mut self, ty: &CiprType, line: usize) {
+        match ty {
+            CiprType::Array(inner) | CiprType::Pointer(inner) => self.validate_type(inner, line),
+            CiprType::Callable(params, ret) => {
+                for param in params {
+                    self.validate_type(param, line);
+                }
+                self.validate_type(ret, line);
+            }
+            CiprType::Struct(name) => {
+                if !self.structs.contains_key(name) {
+                    self.error(line, &format!("Undefined type '{}'.", name));
+                }
+            }
+            CiprType::Int
+            | CiprType::Float
+            | CiprType::Str
+            | CiprType::Bool
+            | CiprType::Null
+            | CiprType::Void
+            | CiprType::Unknown => {}
+        }
+    }
+
+    pub(crate) fn coerce_null_child(
+        &mut self,
+        child_opt: Option<NodeId>,
+        expected_type: &CiprType,
+    ) -> bool {
+        let Some(child_id) = child_opt else {
+            return false;
+        };
+
+        if self.arena[child_id].resolved_type != CiprType::Null {
+            return false;
+        }
+
+        if matches!(expected_type, CiprType::Pointer(_)) {
+            self.arena[child_id].resolved_type = expected_type.clone();
+            if self.arena[child_id].node_type == NodeType::Grouping {
+                let nested = self.arena[child_id].children[0];
+                self.coerce_null_child(nested, expected_type);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn types_match(&self, expected: &CiprType, actual: &CiprType) -> bool {
+        expected == actual
+            || *expected == CiprType::Unknown
+            || *actual == CiprType::Unknown
+            || (*actual == CiprType::Null && matches!(expected, CiprType::Pointer(_)))
+            || (*expected == CiprType::Null && matches!(actual, CiprType::Pointer(_)))
+    }
+
     pub fn check(&mut self, id: NodeId) -> CiprType {
         let node_type = self.arena[id].node_type;
 

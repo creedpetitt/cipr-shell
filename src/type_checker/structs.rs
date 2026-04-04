@@ -4,7 +4,8 @@ use crate::type_checker::TypeChecker;
 impl<'a> TypeChecker<'a> {
     pub(crate) fn check_struct_decl(&mut self, id: NodeId) -> CiprType {
         let name = self.arena[id].token.lexeme.clone();
-        let mut fields = Vec::new();
+        self.register_struct_decl(id);
+
         let children = self.arena[id].children.clone();
         for child_opt in &children {
             if let Some(child_id) = child_opt {
@@ -12,12 +13,10 @@ impl<'a> TypeChecker<'a> {
                     let field_node = &self.arena[*child_id];
                     Self::parse_type_annotation(&field_node.type_annotation)
                 };
+                self.validate_type(&field_type, self.arena[*child_id].token.line);
                 self.arena[*child_id].resolved_type = field_type.clone();
-                let field_name = self.arena[*child_id].token.lexeme.clone();
-                fields.push((field_name, field_type));
             }
         }
-        self.structs.insert(name.clone(), fields);
         CiprType::Struct(name)
     }
 
@@ -67,9 +66,14 @@ impl<'a> TypeChecker<'a> {
             }
 
             let val_type = self.check(val_id);
-            if expected_type != &CiprType::Unknown
+            if val_type == CiprType::Null && !self.coerce_null_child(Some(val_id), expected_type) {
+                self.error(
+                    line,
+                    "Null can only initialize pointer-typed struct fields.",
+                );
+            } else if expected_type != &CiprType::Unknown
                 && val_type != CiprType::Unknown
-                && expected_type != &val_type
+                && !self.types_match(expected_type, &val_type)
             {
                 self.error(
                     line,
@@ -167,9 +171,14 @@ impl<'a> TypeChecker<'a> {
             }
         };
 
-        if expected_type != CiprType::Unknown
+        if val_type == CiprType::Null && !self.coerce_null_child(Some(val_id), &expected_type) {
+            self.error(
+                self.arena[id].token.line,
+                "Null can only be assigned to pointer-typed struct fields.",
+            );
+        } else if expected_type != CiprType::Unknown
             && val_type != CiprType::Unknown
-            && expected_type != val_type
+            && !self.types_match(&expected_type, &val_type)
         {
             self.error(
                 self.arena[id].token.line,

@@ -24,9 +24,17 @@ impl<'a> TypeChecker<'a> {
                 for i in 0..arg_count {
                     if i < param_types.len() {
                         let arg_type = self.check_child(children[i + 1]);
-                        if arg_type != CiprType::Unknown
-                            && param_types[i] != CiprType::Unknown
-                            && arg_type != param_types[i]
+                        if arg_type == CiprType::Null && param_types[i] == CiprType::Unknown {
+                            self.error(
+                                line,
+                                "Null arguments require a parameter with an explicit pointer type.",
+                            );
+                        } else if arg_type == CiprType::Null
+                            && !self.coerce_null_child(children[i + 1], &param_types[i])
+                        {
+                            self.error(line, "Null can only be passed to pointer parameters.");
+                        } else if !self.types_match(&param_types[i], &arg_type)
+                            && arg_type != CiprType::Unknown
                         {
                             self.error(
                                 line,
@@ -53,6 +61,7 @@ impl<'a> TypeChecker<'a> {
         let children = self.arena[id].children.clone();
         let ret_ann = self.arena[id].type_annotation.clone();
         let ret_type = Self::parse_type_annotation(&ret_ann);
+        self.validate_type(&ret_type, self.arena[id].token.line);
 
         self.arena[id].resolved_type = ret_type.clone();
 
@@ -61,6 +70,7 @@ impl<'a> TypeChecker<'a> {
             if let Some(param_id) = child_opt {
                 let p_ann = self.arena[param_id].type_annotation.clone();
                 let p_type = Self::parse_type_annotation(&p_ann);
+                self.validate_type(&p_type, self.arena[param_id].token.line);
                 self.arena[param_id].resolved_type = p_type.clone();
                 param_types.push(p_type);
             }
@@ -75,6 +85,7 @@ impl<'a> TypeChecker<'a> {
         let name = self.arena[id].token.lexeme.clone();
         let annotation = self.arena[id].type_annotation.clone();
         let ret_type = Self::parse_type_annotation(&annotation);
+        self.validate_type(&ret_type, self.arena[id].token.line);
 
         let children = self.arena[id].children.clone();
         let param_count = children.len() - 1;
@@ -84,6 +95,7 @@ impl<'a> TypeChecker<'a> {
             if let Some(param_id) = children[i] {
                 let p_ann = self.arena[param_id].type_annotation.clone();
                 let p_type = Self::parse_type_annotation(&p_ann);
+                self.validate_type(&p_type, self.arena[param_id].token.line);
                 param_types.push(p_type);
             }
         }
@@ -117,6 +129,7 @@ impl<'a> TypeChecker<'a> {
 
     pub(crate) fn check_include(&mut self, id: NodeId) -> CiprType {
         let children = self.arena[id].children.clone();
+        self.predeclare_structs(&children);
         for child in children.iter().flatten() {
             self.check(*child);
         }
