@@ -1,5 +1,6 @@
 use crate::ast::{CiprType, NodeId};
 use crate::type_checker::TypeChecker;
+use std::collections::{HashMap, HashSet};
 
 impl<'a> TypeChecker<'a> {
     pub(crate) fn check_struct_decl(&mut self, id: NodeId) -> CiprType {
@@ -42,20 +43,13 @@ impl<'a> TypeChecker<'a> {
         };
 
         let init_nodes = self.arena[id].children.clone();
-        if init_nodes.len() != struct_fields.len() {
-            self.error(
-                self.arena[id].token.line,
-                &format!(
-                    "Struct '{}' expects {} fields but got {}",
-                    struct_name,
-                    struct_fields.len(),
-                    init_nodes.len()
-                ),
-            );
-            return CiprType::Unknown;
-        }
+        let field_types: HashMap<String, CiprType> = struct_fields
+            .iter()
+            .map(|(name, ty)| (name.clone(), ty.clone()))
+            .collect();
+        let mut seen_fields = HashSet::new();
 
-        for (i, child_opt) in init_nodes.iter().enumerate() {
+        for child_opt in &init_nodes {
             let child_id = child_opt.unwrap();
             let (field_name, val_id, line) = {
                 let assign_node = &self.arena[child_id];
@@ -66,26 +60,55 @@ impl<'a> TypeChecker<'a> {
                 )
             };
 
-            let (expected_name, expected_type) = &struct_fields[i];
-            if &field_name != expected_name {
-                self.error(line, &format!("Provided struct field '{}' does not match expected field '{}' at position {}", field_name, expected_name, i));
-            }
-
-            let val_type = self.check(val_id);
-            if val_type == CiprType::Null && !self.coerce_null_child(Some(val_id), expected_type) {
+            let expected_type = field_types.get(&field_name).cloned();
+            if expected_type.is_none() {
                 self.error(
                     line,
-                    "Null can only initialize pointer-typed struct fields.",
+                    &format!("Struct '{}' has no field '{}'", struct_name, field_name),
                 );
-            } else if expected_type != &CiprType::Unknown
-                && val_type != CiprType::Unknown
-                && !self.types_match(expected_type, &val_type)
-            {
+            }
+
+            if !seen_fields.insert(field_name.clone()) {
                 self.error(
                     line,
                     &format!(
-                        "Field '{}' expects type {:?}, got {:?}",
-                        field_name, expected_type, val_type
+                        "Duplicate initializer for field '{}' in struct '{}'",
+                        field_name, struct_name
+                    ),
+                );
+            }
+
+            let val_type = self.check(val_id);
+            if let Some(expected_type) = expected_type {
+                if val_type == CiprType::Null
+                    && !self.coerce_null_child(Some(val_id), &expected_type)
+                {
+                    self.error(
+                        line,
+                        "Null can only initialize pointer-typed struct fields.",
+                    );
+                } else if expected_type != CiprType::Unknown
+                    && val_type != CiprType::Unknown
+                    && !self.types_match(&expected_type, &val_type)
+                {
+                    self.error(
+                        line,
+                        &format!(
+                            "Field '{}' expects type {:?}, got {:?}",
+                            field_name, expected_type, val_type
+                        ),
+                    );
+                }
+            }
+        }
+
+        for (expected_name, _) in &struct_fields {
+            if !seen_fields.contains(expected_name) {
+                self.error(
+                    self.arena[id].token.line,
+                    &format!(
+                        "Missing initializer for field '{}' in struct '{}'",
+                        expected_name, struct_name
                     ),
                 );
             }

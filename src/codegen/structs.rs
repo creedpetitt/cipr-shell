@@ -97,16 +97,18 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             .ok_or_else(|| format!("Unknown struct '{}'", struct_name))?;
         let mut struct_val = struct_type.const_zero();
 
-        for (i, child_opt) in self.arena[id].children.iter().enumerate() {
+        for child_opt in &self.arena[id].children {
             let child_id = child_opt
                 .ok_or_else(|| "Struct initializer missing field assignment node".to_string())?;
             let assign_node = &self.arena[child_id];
+            let field_name = assign_node.token.lexeme.clone();
+            let field_idx = self.get_struct_field_index(&struct_name, &field_name)?;
             let val_id = assign_node.children[0]
                 .ok_or_else(|| "Struct field initializer missing value".to_string())?;
             let val = self.evaluate(val_id)?;
             struct_val = self
                 .builder
-                .build_insert_value(struct_val, val, i as u32, "struct_init")
+                .build_insert_value(struct_val, val, field_idx, "struct_init")
                 .map_err(|e| e.to_string())?
                 .into_struct_value();
         }
