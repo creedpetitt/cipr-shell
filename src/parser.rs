@@ -15,14 +15,6 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(
-        tokens: &'a [Token],
-        arena: &'a mut NodeArena,
-        visited_files: &'a mut HashSet<String>,
-    ) -> Self {
-        Self::new_with_source(tokens, arena, visited_files, "<source>")
-    }
-
     pub fn new_with_source(
         tokens: &'a [Token],
         arena: &'a mut NodeArena,
@@ -594,6 +586,21 @@ impl<'a> Parser<'a> {
                     equals,
                     Value::Null,
                     vec![inner_expr, value],
+                ));
+            } else if left_type == NodeType::IndexGet {
+                let address_of = alloc_node(
+                    self.arena,
+                    NodeType::AddressOf,
+                    Token::synthetic(TokenType::At, "@", equals.line),
+                    Value::Null,
+                    vec![Some(expr)],
+                );
+                return Some(alloc_node(
+                    self.arena,
+                    NodeType::AssignDeref,
+                    equals,
+                    Value::Null,
+                    vec![Some(address_of), value],
                 ));
             }
 
