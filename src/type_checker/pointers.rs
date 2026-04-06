@@ -148,7 +148,14 @@ impl<'a> TypeChecker<'a> {
         let child_type = self.check(child_id);
 
         match child_type {
-            CiprType::Pointer(_) | CiprType::Str => CiprType::Void,
+            CiprType::Pointer(_) => CiprType::Void,
+            CiprType::Str => {
+                self.error(
+                    self.arena[id].token.line,
+                    "Cannot delete primitive 'str'. 'str' is a non-owning view; only heap pointers can be deleted.",
+                );
+                CiprType::Unknown
+            }
             _ => {
                 self.error(
                     self.arena[id].token.line,
