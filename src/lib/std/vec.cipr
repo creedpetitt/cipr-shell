@@ -29,12 +29,14 @@ fn int_vec_len(vec: @IntVec): int {
 }
 
 // Dynamic Array of Strings
+include "src/lib/std/string.cipr";
+
 struct StrVec {}
 
 extern fn cipr_str_vec_new(): @StrVec;
-extern fn cipr_str_vec_push(vec: @StrVec, val: str): void;
+extern fn cipr_str_vec_push(vec: @StrVec, val: @String): void;
 extern fn cipr_str_vec_get(vec: @StrVec, idx: int): str;
-extern fn cipr_str_vec_set(vec: @StrVec, idx: int, val: str): void;
+extern fn cipr_str_vec_set(vec: @StrVec, idx: int, val: @String): void;
 extern fn cipr_str_vec_len(vec: @StrVec): int;
 extern fn cipr_str_vec_free(vec: @StrVec): void;
 
@@ -42,7 +44,7 @@ fn str_vec_new(): @StrVec {
     return cipr_str_vec_new();
 }
 
-fn str_vec_push(vec: @StrVec, val: str): void {
+fn str_vec_push(vec: @StrVec, val: @String): void {
     cipr_str_vec_push(vec, val);
 }
 
@@ -50,7 +52,7 @@ fn str_vec_get(vec: @StrVec, idx: int): str {
     return cipr_str_vec_get(vec, idx);
 }
 
-fn str_vec_set(vec: @StrVec, idx: int, val: str): void {
+fn str_vec_set(vec: @StrVec, idx: int, val: @String): void {
     cipr_str_vec_set(vec, idx, val);
 }
 

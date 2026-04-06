@@ -7,7 +7,7 @@
 // --- VECTORS ---
 
 typedef kvec_t(int64_t) int_vec_t;
-typedef kvec_t(cipr_str_t) str_vec_t;
+typedef kvec_t(cipr_string_t*) str_vec_t;
 
 void* cipr_int_vec_new(void) {
     int_vec_t *v = (int_vec_t*)malloc(sizeof(int_vec_t));
@@ -54,13 +54,9 @@ void* cipr_str_vec_new(void) {
     return (void*)v;
 }
 
-void cipr_str_vec_push(void *vec, cipr_str_t val) {
+void cipr_str_vec_push(void *vec, cipr_string_t *val) {
     str_vec_t *v = (str_vec_t*)vec;
-    // Deep copy the string data
-    char *copy = malloc((size_t)val.len + 1);
-    memcpy(copy, val.data, (size_t)val.len + 1);
-    cipr_str_t new_str = { .len = val.len, .data = copy };
-    kv_push(cipr_str_t, *v, new_str);
+    kv_push(cipr_string_t*, *v, val);
 }
 
 cipr_str_t cipr_str_vec_get(void *vec, int64_t idx) {
@@ -68,20 +64,18 @@ cipr_str_t cipr_str_vec_get(void *vec, int64_t idx) {
     if (idx < 0 || (size_t)idx >= kv_size(*v)) {
         cipr_runtime_oob(idx, (int64_t)kv_size(*v));
     }
-    return kv_A(*v, idx);
+    cipr_string_t *s = kv_A(*v, idx);
+    if (!s) return cipr_empty_str();
+    return s->view;
 }
 
-void cipr_str_vec_set(void *vec, int64_t idx, cipr_str_t val) {
+void cipr_str_vec_set(void *vec, int64_t idx, cipr_string_t *val) {
     str_vec_t *v = (str_vec_t*)vec;
     if (idx < 0 || (size_t)idx >= kv_size(*v)) {
         cipr_runtime_oob(idx, (int64_t)kv_size(*v));
     }
-    // Free the old string data to prevent leaks
-    free((void*)kv_A(*v, idx).data);
-    // Deep copy the new string data
-    char *copy = malloc((size_t)val.len + 1);
-    memcpy(copy, val.data, (size_t)val.len + 1);
-    kv_A(*v, idx) = (cipr_str_t){ .len = val.len, .data = copy };
+    cipr_string_free(kv_A(*v, idx));
+    kv_A(*v, idx) = val;
 }
 
 int64_t cipr_str_vec_len(void *vec) {
@@ -92,9 +86,8 @@ int64_t cipr_str_vec_len(void *vec) {
 void cipr_str_vec_free(void *vec) {
     if (!vec) return;
     str_vec_t *v = (str_vec_t*)vec;
-    // Clean up all the deep-copied strings
     for (size_t i = 0; i < kv_size(*v); ++i) {
-        free((void*)kv_A(*v, i).data);
+        cipr_string_free(kv_A(*v, i));
     }
     kv_destroy(*v);
     free(v);
@@ -104,7 +97,7 @@ void cipr_str_vec_free(void *vec) {
 // --- MAPS ---
 
 KHASH_MAP_INIT_STR(str_int, int64_t)
-KHASH_MAP_INIT_STR(str_str, cipr_str_t)
+KHASH_MAP_INIT_STR(str_str, cipr_string_t*)
 
 void* cipr_str_int_map_new(void) {
     return (void*)kh_init(str_int);
@@ -158,7 +151,7 @@ void* cipr_str_str_map_new(void) {
     return (void*)kh_init(str_str);
 }
 
-void cipr_str_str_map_put(void *map, cipr_str_t key, cipr_str_t val) {
+void cipr_str_str_map_put(void *map, cipr_str_t key, cipr_string_t *val) {
     khash_t(str_str) *h = (khash_t(str_str)*)map;
     int ret;
     khiter_t k = kh_put(str_str, h, key.data, &ret);
@@ -167,19 +160,17 @@ void cipr_str_str_map_put(void *map, cipr_str_t key, cipr_str_t val) {
         memcpy(key_copy, key.data, (size_t)key.len + 1);
         kh_key(h, k) = key_copy;
     } else { // Overwrite: free old value data
-        free((void*)kh_value(h, k).data);
+        cipr_string_free(kh_value(h, k));
     }
-    // Deep copy the value data
-    char *val_copy = malloc((size_t)val.len + 1);
-    memcpy(val_copy, val.data, (size_t)val.len + 1);
-    kh_value(h, k) = (cipr_str_t){ .len = val.len, .data = val_copy };
+    kh_value(h, k) = val;
 }
 
 cipr_str_t cipr_str_str_map_get(void *map, cipr_str_t key) {
     khash_t(str_str) *h = (khash_t(str_str)*)map;
     khiter_t k = kh_get(str_str, h, key.data);
     if (k == kh_end(h)) return (cipr_str_t){ .len = 0, .data = "" };
-    return kh_value(h, k);
+    if (!kh_value(h, k)) return cipr_empty_str();
+    return kh_value(h, k)->view;
 }
 
 int64_t cipr_str_str_map_contains(void *map, cipr_str_t key) {
@@ -193,7 +184,7 @@ void cipr_str_str_map_remove(void *map, cipr_str_t key) {
     khiter_t k = kh_get(str_str, h, key.data);
     if (k != kh_end(h)) {
         free((void*)kh_key(h, k));
-        free((void*)kh_value(h, k).data);
+        cipr_string_free(kh_value(h, k));
         kh_del(str_str, h, k);
     }
 }
@@ -204,7 +195,7 @@ void cipr_str_str_map_free(void *map) {
     for (khiter_t k = kh_begin(h); k != kh_end(h); ++k) {
         if (kh_exist(h, k)) {
             free((void*)kh_key(h, k));
-            free((void*)kh_value(h, k).data);
+            cipr_string_free(kh_value(h, k));
         }
     }
     kh_destroy(str_str, h);

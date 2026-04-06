@@ -29,10 +29,12 @@ fn str_int_map_remove(map: @StrIntMap, key: str): void {
 }
 
 // Hash Map: String -> String
+include "src/lib/std/string.cipr";
+
 struct StrStrMap {}
 
 extern fn cipr_str_str_map_new(): @StrStrMap;
-extern fn cipr_str_str_map_put(map: @StrStrMap, key: str, val: str): void;
+extern fn cipr_str_str_map_put(map: @StrStrMap, key: str, val: @String): void;
 extern fn cipr_str_str_map_get(map: @StrStrMap, key: str): str;
 extern fn cipr_str_str_map_contains(map: @StrStrMap, key: str): bool;
 extern fn cipr_str_str_map_remove(map: @StrStrMap, key: str): void;
@@ -42,7 +44,7 @@ fn str_str_map_new(): @StrStrMap {
     return cipr_str_str_map_new();
 }
 
-fn str_str_map_put(map: @StrStrMap, key: str, val: str): void {
+fn str_str_map_put(map: @StrStrMap, key: str, val: @String): void {
     cipr_str_str_map_put(map, key, val);
 }
 
