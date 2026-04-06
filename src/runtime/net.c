@@ -42,28 +42,28 @@ int64_t cipr_net_connect(cipr_str_t host, int64_t port, int64_t nonblocking) {
     return (int64_t)akari_tcp_connect(host.data, (uint16_t)port, (int)nonblocking);
 }
 
-cipr_str_t cipr_net_read(int64_t fd, int64_t max_bytes) {
+cipr_string_t *cipr_net_read(int64_t fd, int64_t max_bytes) {
     if (fd < 0 || max_bytes <= 0) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
 
     size_t cap = (size_t)max_bytes;
     char *buf = malloc(cap + 1);
     if (!buf) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
 
     ssize_t n = recv((int)fd, buf, cap, 0);
     if (n <= 0) {
         free(buf);
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
-            return cipr_empty_str();
+            return cipr_string_new_empty();
         }
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
 
     buf[n] = '\0';
-    return (cipr_str_t){ .len = (int64_t)n, .data = buf };
+    return cipr_string_new_owned(buf, (int64_t)n);
 }
 
 int64_t cipr_net_write(int64_t fd, cipr_str_t data) {
@@ -97,27 +97,27 @@ void cipr_net_close(int64_t fd) {
     }
 }
 
-cipr_str_t cipr_net_peer_ip(int64_t fd) {
+cipr_string_t *cipr_net_peer_ip(int64_t fd) {
     if (fd < 0) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
 
     struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
     if (getpeername((int)fd, (struct sockaddr *)&addr, &addr_len) != 0) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
 
     char ip[INET_ADDRSTRLEN];
     if (!inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip))) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
 
     size_t len = strlen(ip);
     char *copy = malloc(len + 1);
     if (!copy) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
     memcpy(copy, ip, len + 1);
-    return (cipr_str_t){ .len = (int64_t)len, .data = copy };
+    return cipr_string_new_owned(copy, (int64_t)len);
 }

@@ -1,12 +1,14 @@
 // std/file — File I/O
 // include "src/lib/std/file.cipr";
 
-extern fn cipr_fread_all(path: str): str;
+include "src/lib/std/string.cipr";
+
+extern fn cipr_fread_all(path: str): @String;
 extern fn cipr_fwrite(path: str, content: str): int;
 extern fn cipr_fappend(path: str, content: str): int;
 extern fn cipr_file_exists(path: str): int;
 
-fn file_read(path: str): str {
+fn file_read(path: str): @String {
     return cipr_fread_all(path);
 }
 

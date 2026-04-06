@@ -1,14 +1,16 @@
 // std/http - HTTP server helpers on top of Akari runtime
 // include "src/lib/std/http.cipr";
 
+include "src/lib/std/string.cipr";
+
 extern fn cipr_http_start(port: int): void;
 extern fn cipr_http_stop(): void;
 extern fn cipr_http_register(method: str, path: str, handler: fn(): void): void;
-extern fn cipr_http_method(): str;
-extern fn cipr_http_path(): str;
-extern fn cipr_http_body(): str;
-extern fn cipr_http_query(key: str, def: str): str;
-extern fn cipr_http_param(key: str, def: str): str;
+extern fn cipr_http_method(): @String;
+extern fn cipr_http_path(): @String;
+extern fn cipr_http_body(): @String;
+extern fn cipr_http_query(key: str, def: str): @String;
+extern fn cipr_http_param(key: str, def: str): @String;
 extern fn cipr_http_send(status: int, content_type: str, body: str): void;
 extern fn cipr_http_json(status: int, body: str): void;
 extern fn cipr_http_file(path: str): void;
@@ -21,15 +23,15 @@ fn http_stop(): void {
     cipr_http_stop();
 }
 
-fn http_method(): str {
+fn http_method(): @String {
     return cipr_http_method();
 }
 
-fn http_path(): str {
+fn http_path(): @String {
     return cipr_http_path();
 }
 
-fn http_body(): str {
+fn http_body(): @String {
     return cipr_http_body();
 }
 
@@ -49,11 +51,11 @@ fn http_delete(path: str, handler: fn(): void): void {
     cipr_http_register("DELETE", path, handler);
 }
 
-fn http_query(key: str, def: str): str {
+fn http_query(key: str, def: str): @String {
     return cipr_http_query(key, def);
 }
 
-fn http_param(key: str, def: str): str {
+fn http_param(key: str, def: str): @String {
     return cipr_http_param(key, def);
 }
 

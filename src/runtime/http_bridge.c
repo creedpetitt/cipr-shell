@@ -30,15 +30,11 @@ static char *cipr_alloc_cstr(const char *data, size_t len) {
     return out;
 }
 
-static cipr_str_t cipr_owned_str(const char *data, size_t len) {
+static cipr_string_t *cipr_owned_string(const char *data, size_t len) {
     if (!data) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
-    char *copy = cipr_alloc_cstr(data, len);
-    if (!copy) {
-        return cipr_empty_str();
-    }
-    return (cipr_str_t){ .len = (int64_t)len, .data = copy };
+    return cipr_string_new_copy(data, (int64_t)len);
 }
 
 static int cipr_ctx_ready(void) {
@@ -83,63 +79,63 @@ void cipr_http_stop(void) {
     akari_stop();
 }
 
-cipr_str_t cipr_http_method(void) {
+cipr_string_t *cipr_http_method(void) {
     if (!cipr_ctx_ready()) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
-    return cipr_owned_str(cipr_current_http_ctx->method, cipr_current_http_ctx->method_len);
+    return cipr_owned_string(cipr_current_http_ctx->method, cipr_current_http_ctx->method_len);
 }
 
-cipr_str_t cipr_http_path(void) {
+cipr_string_t *cipr_http_path(void) {
     if (!cipr_ctx_ready()) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
-    return cipr_owned_str(cipr_current_http_ctx->path, cipr_current_http_ctx->path_len);
+    return cipr_owned_string(cipr_current_http_ctx->path, cipr_current_http_ctx->path_len);
 }
 
-cipr_str_t cipr_http_body(void) {
+cipr_string_t *cipr_http_body(void) {
     if (!cipr_ctx_ready()) {
-        return cipr_empty_str();
+        return cipr_string_new_empty();
     }
-    return cipr_owned_str(cipr_current_http_ctx->body, cipr_current_http_ctx->body_len);
+    return cipr_owned_string(cipr_current_http_ctx->body, cipr_current_http_ctx->body_len);
 }
 
-cipr_str_t cipr_http_query(cipr_str_t key, cipr_str_t def) {
+cipr_string_t *cipr_http_query(cipr_str_t key, cipr_str_t def) {
     if (!cipr_ctx_ready()) {
-        return cipr_owned_str(def.data, (size_t)def.len);
+        return cipr_owned_string(def.data, (size_t)def.len);
     }
 
     char *key_c = cipr_alloc_cstr(key.data, (size_t)key.len);
     if (!key_c) {
-        return cipr_owned_str(def.data, (size_t)def.len);
+        return cipr_owned_string(def.data, (size_t)def.len);
     }
 
     size_t out_len = 0;
     const char *val = akari_get_query_param(cipr_current_http_ctx, key_c, &out_len);
     free(key_c);
     if (!val) {
-        return cipr_owned_str(def.data, (size_t)def.len);
+        return cipr_owned_string(def.data, (size_t)def.len);
     }
-    return cipr_owned_str(val, out_len);
+    return cipr_owned_string(val, out_len);
 }
 
-cipr_str_t cipr_http_param(cipr_str_t key, cipr_str_t def) {
+cipr_string_t *cipr_http_param(cipr_str_t key, cipr_str_t def) {
     if (!cipr_ctx_ready()) {
-        return cipr_owned_str(def.data, (size_t)def.len);
+        return cipr_owned_string(def.data, (size_t)def.len);
     }
 
     char *key_c = cipr_alloc_cstr(key.data, (size_t)key.len);
     if (!key_c) {
-        return cipr_owned_str(def.data, (size_t)def.len);
+        return cipr_owned_string(def.data, (size_t)def.len);
     }
 
     size_t out_len = 0;
     const char *val = akari_get_path_param(cipr_current_http_ctx, key_c, &out_len);
     free(key_c);
     if (!val) {
-        return cipr_owned_str(def.data, (size_t)def.len);
+        return cipr_owned_string(def.data, (size_t)def.len);
     }
-    return cipr_owned_str(val, out_len);
+    return cipr_owned_string(val, out_len);
 }
 
 void cipr_http_register(cipr_str_t method, cipr_str_t path, cipr_callable handler) {

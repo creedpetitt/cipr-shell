@@ -3,13 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-cipr_str_t cipr_readline(void) {
+cipr_string_t *cipr_readline(void) {
     char buf[4096];
-    if (!fgets(buf, sizeof(buf), stdin)) return cipr_empty_str();
+    if (!fgets(buf, sizeof(buf), stdin)) return cipr_string_new_empty();
     int64_t len = (int64_t)strlen(buf);
     if (len > 0 && buf[len - 1] == '\n') len--;
-    char *data = malloc((size_t)len + 1);
-    memcpy(data, buf, (size_t)len);
-    data[len] = '\0';
-    return (cipr_str_t){ .len = len, .data = data };
+    return cipr_string_new_copy(buf, len);
 }

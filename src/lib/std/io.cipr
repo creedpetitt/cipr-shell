@@ -1,8 +1,10 @@
 // std/io — Console I/O
 // include "src/lib/std/io.cipr";
 
-extern fn cipr_readline(): str;
+include "src/lib/std/string.cipr";
 
-fn readline(): str {
+extern fn cipr_readline(): @String;
+
+fn readline(): @String {
     return cipr_readline();
 }
