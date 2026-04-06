@@ -62,14 +62,6 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
         let val = self.evaluate(child_id)?;
 
         let (ext_name, fn_type, arg) = match child_type {
-            CiprType::Str => {
-                let struct_type = self.get_llvm_type(&CiprType::Str)?;
-                let ftype = self
-                    .context
-                    .void_type()
-                    .fn_type(&[struct_type.into()], false);
-                ("cipr_str_free", ftype, val.into())
-            }
             CiprType::Pointer(inner) => {
                 let (fn_name, arg_val) = match *inner {
                     CiprType::Struct(name) if name == "IntVec" => ("cipr_int_vec_free", val.into()),
@@ -80,6 +72,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     CiprType::Struct(name) if name == "StrStrMap" => {
                         ("cipr_str_str_map_free", val.into())
                     }
+                    CiprType::Struct(name) if name == "String" => ("cipr_string_free", val.into()),
                     _ => {
                         let raw_ptr = self
                             .builder
