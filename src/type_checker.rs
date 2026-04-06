@@ -159,8 +159,20 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn enforce_return_type_rules(&mut self, ty: &CiprType, line: usize, context: &str) {
-        if *ty != CiprType::Void {
-            self.enforce_value_type_rules(ty, line, context);
+        match ty {
+            CiprType::Array(_) => {
+                self.error(
+                    line,
+                    &format!(
+                        "{} cannot be an array. Arrays are stack-allocated and cannot be returned.",
+                        context
+                    ),
+                );
+            }
+            _ if *ty != CiprType::Void => {
+                self.enforce_value_type_rules(ty, line, context);
+            }
+            _ => {}
         }
     }
 
