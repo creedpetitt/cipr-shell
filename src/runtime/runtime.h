@@ -78,6 +78,8 @@ int64_t    cipr_str_starts_with(cipr_str_t s, cipr_str_t prefix);
 cipr_string_t *cipr_string_new_empty(void);
 cipr_string_t *cipr_string_new_copy(const char *data, int64_t len);
 cipr_string_t *cipr_string_new_owned(char *owned_data, int64_t len);
+cipr_string_t *cipr_string_from_str(cipr_str_t s);
+cipr_str_t  cipr_string_view(cipr_string_t *s);
 void       cipr_string_free(cipr_string_t *s);
 
 // --- file ---

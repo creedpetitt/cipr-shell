@@ -63,16 +63,22 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
         let (ext_name, fn_type, arg) = match child_type {
             CiprType::Pointer(inner) => {
-                let (fn_name, arg_val) = match *inner {
-                    CiprType::Struct(name) if name == "IntVec" => ("cipr_int_vec_free", val.into()),
-                    CiprType::Struct(name) if name == "StrVec" => ("cipr_str_vec_free", val.into()),
+                let (fn_name, arg_val, typed_string_free) = match *inner {
+                    CiprType::Struct(name) if name == "IntVec" => {
+                        ("cipr_int_vec_free", val.into(), false)
+                    }
+                    CiprType::Struct(name) if name == "StrVec" => {
+                        ("cipr_str_vec_free", val.into(), false)
+                    }
                     CiprType::Struct(name) if name == "StrIntMap" => {
-                        ("cipr_str_int_map_free", val.into())
+                        ("cipr_str_int_map_free", val.into(), false)
                     }
                     CiprType::Struct(name) if name == "StrStrMap" => {
-                        ("cipr_str_str_map_free", val.into())
+                        ("cipr_str_str_map_free", val.into(), false)
                     }
-                    CiprType::Struct(name) if name == "String" => ("cipr_string_free", val.into()),
+                    CiprType::Struct(name) if name == "String" => {
+                        ("cipr_string_free", val.into(), true)
+                    }
                     _ => {
                         let raw_ptr = self
                             .builder
@@ -82,13 +88,22 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                                 "delete_ptr_cast",
                             )
                             .map_err(|e| e.to_string())?;
-                        ("cipr_free", raw_ptr.into())
+                        ("cipr_free", raw_ptr.into(), false)
                     }
                 };
-                let ftype = self
-                    .context
-                    .void_type()
-                    .fn_type(&[self.i8_ptr_type().into()], false);
+
+                let ftype = if typed_string_free {
+                    let string_ptr_ty = self.get_llvm_type(&CiprType::Pointer(Box::new(
+                        CiprType::Struct("String".to_string()),
+                    )))?;
+                    self.context
+                        .void_type()
+                        .fn_type(&[string_ptr_ty.into()], false)
+                } else {
+                    self.context
+                        .void_type()
+                        .fn_type(&[self.i8_ptr_type().into()], false)
+                };
                 (fn_name, ftype, arg_val)
             }
             _ => return Err(format!("Cannot delete non-heap type: {:?}", child_type)),

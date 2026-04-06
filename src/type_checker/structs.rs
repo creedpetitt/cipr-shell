@@ -30,6 +30,14 @@ impl<'a> TypeChecker<'a> {
     pub(crate) fn check_struct_init(&mut self, id: NodeId) -> CiprType {
         let struct_name = self.arena[id].token.lexeme.clone();
 
+        if self.reject_opaque_string_construction(
+            &struct_name,
+            self.arena[id].token.line,
+            "struct initialization",
+        ) {
+            return CiprType::Unknown;
+        }
+
         let struct_fields_opt = self.structs.get(&struct_name).cloned();
         let struct_fields = match struct_fields_opt {
             Some(f) => f,

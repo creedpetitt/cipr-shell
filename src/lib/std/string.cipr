@@ -1,9 +1,7 @@
 // std/string — String operations
 // include "src/lib/std/string.cipr";
 
-struct String {
-    view: str
-}
+struct String {}
 
 extern fn cipr_str_len(s: str): int;
 extern fn cipr_str_concat(a: str, b: str): @String;
@@ -15,7 +13,8 @@ extern fn cipr_int_to_str(n: int): @String;
 extern fn cipr_float_to_str(n: float): @String;
 extern fn cipr_str_contains(s: str, sub: str): int;
 extern fn cipr_str_starts_with(s: str, prefix: str): int;
-extern fn cipr_string_free(s: @String): void;
+extern fn cipr_string_from_str(v: str): @String;
+extern fn cipr_string_view(s: @String): str;
 
 fn str_len(s: str): int {
     return cipr_str_len(s);
@@ -57,10 +56,10 @@ fn str_starts_with(s: str, prefix: str): bool {
     return cipr_str_starts_with(s, prefix) != 0;
 }
 
-fn string_view(s: @String): str {
-    return s.view;
+fn string_from(v: str): @String {
+    return cipr_string_from_str(v);
 }
 
-fn string_free(s: @String): void {
-    cipr_string_free(s);
+fn string_view(s: @String): str {
+    return cipr_string_view(s);
 }

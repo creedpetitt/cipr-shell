@@ -46,6 +46,15 @@ cipr_string_t *cipr_string_new_owned(char *owned_data, int64_t len) {
     return s;
 }
 
+cipr_string_t *cipr_string_from_str(cipr_str_t s) {
+    return cipr_string_new_copy(s.data, s.len);
+}
+
+cipr_str_t cipr_string_view(cipr_string_t *s) {
+    if (!s) return cipr_empty_str();
+    return s->view;
+}
+
 int64_t cipr_str_len(cipr_str_t s) {
     return s.len;
 }

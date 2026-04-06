@@ -219,6 +219,26 @@ impl<'a> TypeChecker<'a> {
             || (*expected == CiprType::Null && matches!(actual, CiprType::Pointer(_)))
     }
 
+    pub(crate) fn reject_opaque_string_construction(
+        &mut self,
+        struct_name: &str,
+        line: usize,
+        context: &str,
+    ) -> bool {
+        if struct_name != "String" {
+            return false;
+        }
+
+        self.error(
+            line,
+            &format!(
+                "String is opaque; use string_from(...) or a string-producing API instead of {}.",
+                context
+            ),
+        );
+        true
+    }
+
     pub fn check(&mut self, id: NodeId) -> CiprType {
         let node_type = self.arena[id].node_type;
 
