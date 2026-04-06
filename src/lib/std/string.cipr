@@ -63,3 +63,19 @@ fn string_from(v: str): @String {
 fn string_view(s: @String): str {
     return cipr_string_view(s);
 }
+
+fn String_view(s: @String): str {
+    return string_view(s);
+}
+
+fn String_len(s: @String): int {
+    return str_len(string_view(s));
+}
+
+fn String_contains(s: @String, sub: str): bool {
+    return str_contains(string_view(s), sub);
+}
+
+fn String_starts_with(s: @String, prefix: str): bool {
+    return str_starts_with(string_view(s), prefix);
+}

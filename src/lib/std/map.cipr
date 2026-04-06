@@ -16,16 +16,32 @@ fn str_int_map_put(map: @StrIntMap, key: str, val: int): void {
     cipr_str_int_map_put(map, key, val);
 }
 
+fn StrIntMap_put(map: @StrIntMap, key: str, val: int): void {
+    str_int_map_put(map, key, val);
+}
+
 fn str_int_map_get(map: @StrIntMap, key: str): int {
     return cipr_str_int_map_get(map, key);
+}
+
+fn StrIntMap_get(map: @StrIntMap, key: str): int {
+    return str_int_map_get(map, key);
 }
 
 fn str_int_map_contains(map: @StrIntMap, key: str): bool {
     return cipr_str_int_map_contains(map, key);
 }
 
+fn StrIntMap_contains(map: @StrIntMap, key: str): bool {
+    return str_int_map_contains(map, key);
+}
+
 fn str_int_map_remove(map: @StrIntMap, key: str): void {
     cipr_str_int_map_remove(map, key);
+}
+
+fn StrIntMap_remove(map: @StrIntMap, key: str): void {
+    str_int_map_remove(map, key);
 }
 
 // Hash Map: String -> String
@@ -48,14 +64,30 @@ fn str_str_map_put(map: @StrStrMap, key: str, val: @String): void {
     cipr_str_str_map_put(map, key, val);
 }
 
+fn StrStrMap_put(map: @StrStrMap, key: str, val: @String): void {
+    str_str_map_put(map, key, val);
+}
+
 fn str_str_map_get(map: @StrStrMap, key: str): str {
     return cipr_str_str_map_get(map, key);
+}
+
+fn StrStrMap_get(map: @StrStrMap, key: str): str {
+    return str_str_map_get(map, key);
 }
 
 fn str_str_map_contains(map: @StrStrMap, key: str): bool {
     return cipr_str_str_map_contains(map, key);
 }
 
+fn StrStrMap_contains(map: @StrStrMap, key: str): bool {
+    return str_str_map_contains(map, key);
+}
+
 fn str_str_map_remove(map: @StrStrMap, key: str): void {
     cipr_str_str_map_remove(map, key);
+}
+
+fn StrStrMap_remove(map: @StrStrMap, key: str): void {
+    str_str_map_remove(map, key);
 }

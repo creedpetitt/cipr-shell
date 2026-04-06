@@ -16,16 +16,32 @@ fn int_vec_push(vec: @IntVec, val: int): void {
     cipr_int_vec_push(vec, val);
 }
 
+fn IntVec_push(vec: @IntVec, val: int): void {
+    int_vec_push(vec, val);
+}
+
 fn int_vec_get(vec: @IntVec, idx: int): int {
     return cipr_int_vec_get(vec, idx);
+}
+
+fn IntVec_get(vec: @IntVec, idx: int): int {
+    return int_vec_get(vec, idx);
 }
 
 fn int_vec_set(vec: @IntVec, idx: int, val: int): void {
     cipr_int_vec_set(vec, idx, val);
 }
 
+fn IntVec_set(vec: @IntVec, idx: int, val: int): void {
+    int_vec_set(vec, idx, val);
+}
+
 fn int_vec_len(vec: @IntVec): int {
     return cipr_int_vec_len(vec);
+}
+
+fn IntVec_len(vec: @IntVec): int {
+    return int_vec_len(vec);
 }
 
 // Dynamic Array of Strings
@@ -48,14 +64,30 @@ fn str_vec_push(vec: @StrVec, val: @String): void {
     cipr_str_vec_push(vec, val);
 }
 
+fn StrVec_push(vec: @StrVec, val: @String): void {
+    str_vec_push(vec, val);
+}
+
 fn str_vec_get(vec: @StrVec, idx: int): str {
     return cipr_str_vec_get(vec, idx);
+}
+
+fn StrVec_get(vec: @StrVec, idx: int): str {
+    return str_vec_get(vec, idx);
 }
 
 fn str_vec_set(vec: @StrVec, idx: int, val: @String): void {
     cipr_str_vec_set(vec, idx, val);
 }
 
+fn StrVec_set(vec: @StrVec, idx: int, val: @String): void {
+    str_vec_set(vec, idx, val);
+}
+
 fn str_vec_len(vec: @StrVec): int {
     return cipr_str_vec_len(vec);
+}
+
+fn StrVec_len(vec: @StrVec): int {
+    return str_vec_len(vec);
 }

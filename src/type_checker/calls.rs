@@ -1,8 +1,119 @@
-use crate::ast::{CiprType, NodeId};
+use crate::ast::{alloc_node, CiprType, NodeId, NodeType};
+use crate::token::{Token, TokenType, Value};
 use crate::type_checker::TypeChecker;
 
 impl<'a> TypeChecker<'a> {
+    fn maybe_rewrite_ufcs_call(&mut self, call_id: NodeId) -> Option<CiprType> {
+        let call_children = self.arena[call_id].children.clone();
+        let Some(callee_id) = call_children[0] else {
+            return Some(CiprType::Unknown);
+        };
+
+        if self.arena[callee_id].node_type != NodeType::GetField {
+            return None;
+        }
+
+        let get_children = self.arena[callee_id].children.clone();
+        let Some(receiver_id) = get_children[0] else {
+            return Some(CiprType::Unknown);
+        };
+
+        let receiver_type = self.check(receiver_id);
+        let method_name = self.arena[callee_id].token.lexeme.clone();
+        let line = self.arena[call_id].token.line;
+
+        // Real fields keep field-call behavior (including non-callable errors).
+        if self.receiver_has_field(&receiver_type, &method_name) {
+            return None;
+        }
+
+        let mut candidates = Vec::new();
+        if let Some(base_type_name) = Self::ufcs_base_type_name(&receiver_type) {
+            candidates.push(format!("{}_{}", base_type_name, method_name));
+        }
+        candidates.push(method_name.clone());
+
+        for candidate in &candidates {
+            let Some(candidate_type) = self.env.get(candidate) else {
+                continue;
+            };
+            if !self.ufcs_receiver_compatible(&candidate_type, &receiver_type) {
+                continue;
+            }
+
+            let callee_token = Token::synthetic(TokenType::Identifier, candidate, line);
+            let rewritten_callee = alloc_node(
+                self.arena,
+                NodeType::VarExpr,
+                callee_token,
+                Value::Null,
+                vec![],
+            );
+
+            let mut rewritten_children = vec![Some(rewritten_callee), Some(receiver_id)];
+            rewritten_children.extend(call_children.iter().skip(1).copied());
+            self.arena[call_id].children = rewritten_children;
+            return None;
+        }
+
+        self.error(
+            line,
+            &format!(
+                "No method '{}' for receiver type {:?}. Tried: {}.",
+                method_name,
+                receiver_type,
+                candidates.join(", ")
+            ),
+        );
+        Some(CiprType::Unknown)
+    }
+
+    fn receiver_has_field(&self, receiver_type: &CiprType, field_name: &str) -> bool {
+        let struct_name_opt = match receiver_type {
+            CiprType::Struct(name) => Some(name),
+            CiprType::Pointer(inner) => match inner.as_ref() {
+                CiprType::Struct(name) => Some(name),
+                _ => None,
+            },
+            _ => None,
+        };
+
+        let Some(struct_name) = struct_name_opt else {
+            return false;
+        };
+        let Some(fields) = self.structs.get(struct_name) else {
+            return false;
+        };
+        fields.iter().any(|(name, _)| name == field_name)
+    }
+
+    fn ufcs_base_type_name(receiver_type: &CiprType) -> Option<String> {
+        match receiver_type {
+            CiprType::Struct(name) => Some(name.clone()),
+            CiprType::Pointer(inner) => match inner.as_ref() {
+                CiprType::Struct(name) => Some(name.clone()),
+                _ => None,
+            },
+            CiprType::Str => Some("str".to_string()),
+            _ => None,
+        }
+    }
+
+    fn ufcs_receiver_compatible(&self, candidate_type: &CiprType, receiver_type: &CiprType) -> bool {
+        let CiprType::Callable(params, _) = candidate_type else {
+            return false;
+        };
+        let Some(first_param) = params.first() else {
+            return false;
+        };
+        self.types_match(first_param, receiver_type)
+    }
+
     pub(crate) fn check_call(&mut self, id: NodeId) -> CiprType {
+        if let Some(t) = self.maybe_rewrite_ufcs_call(id) {
+            return t;
+        }
+
         let children = self.arena[id].children.clone();
         let line = self.arena[id].token.line;
 
