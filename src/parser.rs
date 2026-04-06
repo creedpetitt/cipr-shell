@@ -855,6 +855,10 @@ impl<'a> Parser<'a> {
             }
             self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
 
+            if let Some(desugared) = self.try_desugar_builtin_new(&struct_name, &args) {
+                return Some(desugared);
+            }
+
             return Some(alloc_node(
                 self.arena,
                 NodeType::ExprNew,
@@ -1009,6 +1013,56 @@ impl<'a> Parser<'a> {
     }
 
     // ── Utilities ──
+
+    fn try_desugar_builtin_new(
+        &mut self,
+        struct_name: &Token,
+        args: &[Option<NodeId>],
+    ) -> Option<NodeId> {
+        // Reserved built-in heap constructors lowered to stdlib function calls.
+        let (mapped_fn, expected_arity) = match struct_name.lexeme.as_str() {
+            "String" => ("string_from", 1usize),
+            "IntVec" => ("int_vec_new", 0usize),
+            "StrVec" => ("str_vec_new", 0usize),
+            "StrIntMap" => ("str_int_map_new", 0usize),
+            "StrStrMap" => ("str_str_map_new", 0usize),
+            _ => return None,
+        };
+
+        if args.len() != expected_arity {
+            self.error_at(
+                struct_name,
+                &format!(
+                    "'new {}' expects {} arguments but got {}.",
+                    struct_name.lexeme,
+                    expected_arity,
+                    args.len()
+                ),
+            );
+
+            return Some(alloc_node(
+                self.arena,
+                NodeType::Literal,
+                Token::synthetic(TokenType::Null, "null", struct_name.line),
+                Value::Null,
+                vec![],
+            ));
+        }
+
+        let fn_tok = Token::synthetic(TokenType::Identifier, mapped_fn, struct_name.line);
+        let callee = alloc_node(self.arena, NodeType::VarExpr, fn_tok, Value::Null, vec![]);
+
+        let mut call_args = vec![Some(callee)];
+        call_args.extend(args.iter().copied());
+
+        Some(alloc_node(
+            self.arena,
+            NodeType::Call,
+            struct_name.clone(),
+            Value::Null,
+            call_args,
+        ))
+    }
 
     fn match_types(&mut self, types: &[TokenType]) -> bool {
         for &tt in types {
