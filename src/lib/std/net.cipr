@@ -38,3 +38,64 @@ fn net_close(fd: int): void {
 fn net_peer_ip(fd: int): @String {
     return cipr_net_peer_ip(fd);
 }
+
+// Typed socket wrapper on top of raw fd-based net APIs.
+struct Socket {
+    fd: int,
+    open: bool
+}
+
+fn socket_from_fd(fd: int): Socket {
+    return Socket { fd: fd, open: fd >= 0 };
+}
+
+fn socket_listen(port: int, nonblocking: bool): Socket {
+    return socket_from_fd(net_listen(port, nonblocking));
+}
+
+fn socket_accept(server: Socket, nonblocking: bool): Socket {
+    if (!server.open or server.fd < 0) {
+        return Socket { fd: -1, open: false };
+    }
+    return socket_from_fd(net_accept(server.fd, nonblocking));
+}
+
+fn socket_connect(host: str, port: int, nonblocking: bool): Socket {
+    return socket_from_fd(net_connect(host, port, nonblocking));
+}
+
+fn Socket_is_open(s: Socket): bool {
+    return s.open and s.fd >= 0;
+}
+
+fn Socket_accept(s: Socket, nonblocking: bool): Socket {
+    return socket_accept(s, nonblocking);
+}
+
+fn Socket_read(s: Socket, max_bytes: int): @String {
+    if (!Socket_is_open(s)) {
+        return string_from("");
+    }
+    return net_read(s.fd, max_bytes);
+}
+
+fn Socket_write(s: Socket, data: str): int {
+    if (!Socket_is_open(s)) {
+        return -1;
+    }
+    return net_write(s.fd, data);
+}
+
+fn Socket_peer_ip(s: Socket): @String {
+    if (!Socket_is_open(s)) {
+        return string_from("");
+    }
+    return net_peer_ip(s.fd);
+}
+
+fn Socket_close(s: Socket): Socket {
+    if (Socket_is_open(s)) {
+        net_close(s.fd);
+    }
+    return Socket { fd: -1, open: false };
+}
