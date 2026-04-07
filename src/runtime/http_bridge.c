@@ -7,7 +7,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-static akari_context *cipr_current_http_ctx = NULL;
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define CIPR_TLS _Thread_local
+#elif defined(__GNUC__)
+#define CIPR_TLS __thread
+#else
+#define CIPR_TLS
+#endif
+
+#define CIPR_HTTP_CTX_STACK_MAX 32
+
+static CIPR_TLS akari_context *cipr_http_ctx_stack[CIPR_HTTP_CTX_STACK_MAX];
+static CIPR_TLS int cipr_http_ctx_depth = 0;
 
 typedef struct {
     char method[8];
@@ -37,12 +48,40 @@ static cipr_string_t *cipr_owned_string(const char *data, size_t len) {
     return cipr_string_new_copy(data, (int64_t)len);
 }
 
+static akari_context *cipr_http_ctx_current(void) {
+    if (cipr_http_ctx_depth <= 0) {
+        return NULL;
+    }
+    return cipr_http_ctx_stack[cipr_http_ctx_depth - 1];
+}
+
+static void cipr_http_ctx_push(akari_context *ctx) {
+    if (cipr_http_ctx_depth < CIPR_HTTP_CTX_STACK_MAX) {
+        cipr_http_ctx_stack[cipr_http_ctx_depth] = ctx;
+        cipr_http_ctx_depth++;
+        return;
+    }
+
+    // Keep most-recent context even if nesting exceeds configured depth.
+    cipr_http_ctx_stack[CIPR_HTTP_CTX_STACK_MAX - 1] = ctx;
+}
+
+static void cipr_http_ctx_pop(void) {
+    if (cipr_http_ctx_depth <= 0) {
+        return;
+    }
+    cipr_http_ctx_depth--;
+    cipr_http_ctx_stack[cipr_http_ctx_depth] = NULL;
+}
+
 static int cipr_ctx_ready(void) {
-    return cipr_current_http_ctx != NULL;
+    return cipr_http_ctx_current() != NULL;
 }
 
 static void cipr_http_dispatch(akari_context *ctx) {
-    cipr_current_http_ctx = ctx;
+    int matched = 0;
+    cipr_http_ctx_push(ctx);
+
     for (int i = 0; i < cipr_http_callback_count; i++) {
         if ((size_t)ctx->method_len != strlen(cipr_http_callbacks[i].method)) {
             continue;
@@ -59,12 +98,18 @@ static void cipr_http_dispatch(akari_context *ctx) {
 
         void (*fn)(void *) = (void (*)(void *))cipr_http_callbacks[i].handler.fn_ptr;
         fn(cipr_http_callbacks[i].handler.env_ptr);
-        cipr_current_http_ctx = NULL;
-        return;
+        matched = 1;
+        break;
     }
 
-    akari_res_send(cipr_current_http_ctx, 404, "text/plain", "404 Route Not Found");
-    cipr_current_http_ctx = NULL;
+    if (!matched) {
+        akari_context *active_ctx = cipr_http_ctx_current();
+        if (active_ctx) {
+            akari_res_send(active_ctx, 404, "text/plain", "404 Route Not Found");
+        }
+    }
+
+    cipr_http_ctx_pop();
 }
 
 void cipr_http_start(int64_t port) {
@@ -80,27 +125,31 @@ void cipr_http_stop(void) {
 }
 
 cipr_string_t *cipr_http_method(void) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return cipr_string_new_empty();
     }
-    return cipr_owned_string(cipr_current_http_ctx->method, cipr_current_http_ctx->method_len);
+    return cipr_owned_string(ctx->method, ctx->method_len);
 }
 
 cipr_string_t *cipr_http_path(void) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return cipr_string_new_empty();
     }
-    return cipr_owned_string(cipr_current_http_ctx->path, cipr_current_http_ctx->path_len);
+    return cipr_owned_string(ctx->path, ctx->path_len);
 }
 
 cipr_string_t *cipr_http_body(void) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return cipr_string_new_empty();
     }
-    return cipr_owned_string(cipr_current_http_ctx->body, cipr_current_http_ctx->body_len);
+    return cipr_owned_string(ctx->body, ctx->body_len);
 }
 
 cipr_string_t *cipr_http_query(cipr_str_t key, cipr_str_t def) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return cipr_owned_string(def.data, (size_t)def.len);
     }
@@ -111,7 +160,7 @@ cipr_string_t *cipr_http_query(cipr_str_t key, cipr_str_t def) {
     }
 
     size_t out_len = 0;
-    const char *val = akari_get_query_param(cipr_current_http_ctx, key_c, &out_len);
+    const char *val = akari_get_query_param(ctx, key_c, &out_len);
     free(key_c);
     if (!val) {
         return cipr_owned_string(def.data, (size_t)def.len);
@@ -120,6 +169,7 @@ cipr_string_t *cipr_http_query(cipr_str_t key, cipr_str_t def) {
 }
 
 cipr_string_t *cipr_http_param(cipr_str_t key, cipr_str_t def) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return cipr_owned_string(def.data, (size_t)def.len);
     }
@@ -130,7 +180,7 @@ cipr_string_t *cipr_http_param(cipr_str_t key, cipr_str_t def) {
     }
 
     size_t out_len = 0;
-    const char *val = akari_get_path_param(cipr_current_http_ctx, key_c, &out_len);
+    const char *val = akari_get_path_param(ctx, key_c, &out_len);
     free(key_c);
     if (!val) {
         return cipr_owned_string(def.data, (size_t)def.len);
@@ -166,6 +216,7 @@ void cipr_http_register(cipr_str_t method, cipr_str_t path, cipr_callable handle
 }
 
 void cipr_http_send(int64_t status, cipr_str_t content_type, cipr_str_t body) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return;
     }
@@ -174,18 +225,20 @@ void cipr_http_send(int64_t status, cipr_str_t content_type, cipr_str_t body) {
     if (!content_type_c) {
         return;
     }
-    akari_res_data(cipr_current_http_ctx, (int)status, content_type_c, body.data, (size_t)body.len);
+    akari_res_data(ctx, (int)status, content_type_c, body.data, (size_t)body.len);
     free(content_type_c);
 }
 
 void cipr_http_json(int64_t status, cipr_str_t body) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return;
     }
-    akari_res_data(cipr_current_http_ctx, (int)status, "application/json", body.data, (size_t)body.len);
+    akari_res_data(ctx, (int)status, "application/json", body.data, (size_t)body.len);
 }
 
 void cipr_http_file(cipr_str_t path) {
+    akari_context *ctx = cipr_http_ctx_current();
     if (!cipr_ctx_ready()) {
         return;
     }
@@ -194,6 +247,6 @@ void cipr_http_file(cipr_str_t path) {
     if (!path_c) {
         return;
     }
-    akari_res_file(cipr_current_http_ctx, path_c);
+    akari_res_file(ctx, path_c);
     free(path_c);
 }
