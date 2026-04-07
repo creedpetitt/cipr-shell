@@ -25,11 +25,7 @@ pub struct TypeChecker<'a> {
 }
 
 impl<'a> TypeChecker<'a> {
-    pub fn new(arena: &'a mut NodeArena) -> Self {
-        Self::new_with_source(arena, "<source>")
-    }
-
-    pub fn new_with_source(arena: &'a mut NodeArena, source_name: &str) -> Self {
+    pub fn new(arena: &'a mut NodeArena, source_name: &str) -> Self {
         let mut env = TypeEnv::new();
         env.define(
             "print",

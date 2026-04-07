@@ -15,7 +15,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new_with_source(
+    pub fn new(
         tokens: &'a [Token],
         arena: &'a mut NodeArena,
         visited_files: &'a mut HashSet<String>,
@@ -277,14 +277,13 @@ impl<'a> Parser<'a> {
             match std::fs::read_to_string(&path_str) {
                 Ok(source) => {
                     let (tokens, scan_error, scan_diags) =
-                        crate::scanner::Scanner::new_with_source(&source, &path_str)
-                            .scan_tokens_with_diagnostics();
+                        crate::scanner::Scanner::new(&source, &path_str).scan_tokens();
                     self.diagnostics.extend(scan_diags);
                     if scan_error {
                         self.error_at(&path, "Included file has scanner errors.");
                     } else {
                         let (root_id, sub_had_error) = {
-                            let mut sub_parser = Parser::new_with_source(
+                            let mut sub_parser = Parser::new(
                                 &tokens,
                                 &mut *self.arena,
                                 &mut *self.visited_files,

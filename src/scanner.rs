@@ -16,11 +16,7 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub fn new(source: &str) -> Self {
-        Self::new_with_source(source, "<source>")
-    }
-
-    pub fn new_with_source(source: &str, source_name: &str) -> Self {
+    pub fn new(source: &str, source_name: &str) -> Self {
         let mut keywords = HashMap::new();
         keywords.insert("and", TokenType::And);
         keywords.insert("else", TokenType::Else);
@@ -53,24 +49,7 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(mut self) -> (Vec<Token>, bool) {
-        while !self.is_at_end() {
-            self.start = self.current;
-            self.scan_token();
-        }
-
-        self.tokens.push(Token::new(
-            TokenType::EofToken,
-            String::new(),
-            Value::Null,
-            self.line,
-        ));
-
-        let had_error = self.had_error;
-        (self.tokens, had_error)
-    }
-
-    pub fn scan_tokens_with_diagnostics(mut self) -> (Vec<Token>, bool, Diagnostics) {
+    pub fn scan_tokens(mut self) -> (Vec<Token>, bool, Diagnostics) {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token();
@@ -317,7 +296,8 @@ mod tests {
     use crate::token::{TokenType, Value};
 
     fn scan(src: &str) -> (Vec<Token>, bool) {
-        Scanner::new(src).scan_tokens()
+        let (tokens, had_error, _) = Scanner::new(src, "<source>").scan_tokens();
+        (tokens, had_error)
     }
 
     /// Collect just the token types from a source string.

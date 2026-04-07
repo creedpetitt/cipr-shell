@@ -59,8 +59,7 @@ impl Core {
         source_name: &str,
     ) -> Result<(), String> {
         let mut diagnostics = Diagnostics::new();
-        let (tokens, scan_error, scan_diags) =
-            Scanner::new_with_source(source, source_name).scan_tokens_with_diagnostics();
+        let (tokens, scan_error, scan_diags) = Scanner::new(source, source_name).scan_tokens();
         diagnostics.extend(scan_diags);
 
         if scan_error {
@@ -68,8 +67,7 @@ impl Core {
         }
 
         let mut visited_files = std::collections::HashSet::new();
-        let mut parser =
-            Parser::new_with_source(&tokens, &mut self.arena, &mut visited_files, source_name);
+        let mut parser = Parser::new(&tokens, &mut self.arena, &mut visited_files, source_name);
         let root = parser.parse();
         diagnostics.extend(parser.take_diagnostics());
 
@@ -78,7 +76,7 @@ impl Core {
         }
 
         if let Some(root_id) = root {
-            let mut type_checker = TypeChecker::new_with_source(&mut self.arena, source_name);
+            let mut type_checker = TypeChecker::new(&mut self.arena, source_name);
             type_checker.check(root_id);
             diagnostics.extend(type_checker.take_diagnostics());
             if type_checker.had_error {
