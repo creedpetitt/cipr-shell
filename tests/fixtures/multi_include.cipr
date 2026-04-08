@@ -3,6 +3,8 @@
 include "src/lib/std/string.cipr";
 include "src/lib/std/time.cipr";
 
-let greeting: str = str_concat("Hello", " World");
-print(greeting);
-print(str_len(greeting));
+let greeting: @String = str_concat("Hello", " World");
+let view: str = string_view(greeting);
+print(view);
+print(str_len(view));
+delete greeting;
